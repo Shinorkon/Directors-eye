@@ -1,6 +1,6 @@
 import type { Scriptment, Beat } from "@/types";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api";
 
 export async function generateScriptment(concept: string): Promise<Scriptment> {
   const res = await fetch(`${API_BASE}/scriptment/generate`, {
@@ -48,7 +48,7 @@ export async function speakDirectorNote(params: {
 }
 
 export async function checkBackendStatus() {
-  const res = await fetch(`${API_BASE.replace("/api", "")}/health`);
+  const res = await fetch(`/health`);
   if (!res.ok) return null;
   return res.json();
 }

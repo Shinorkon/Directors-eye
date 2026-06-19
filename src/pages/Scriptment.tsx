@@ -6,6 +6,7 @@ import { sampleScriptment } from "@/data/demo";
 import type { Beat, Scriptment } from "@/types";
 import BeatCard from "@/components/BeatCard";
 import StoryboardFrame from "@/components/StoryboardFrame";
+import DirectorNote from "@/components/DirectorNote";
 import { generateScriptment, generateStoryboardFrames } from "@/services/api";
 
 export default function Scriptment() {
@@ -84,6 +85,36 @@ export default function Scriptment() {
       setError(err.message || "Regeneration failed.");
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const [regeneratingBeat, setRegeneratingBeat] = useState<number | null>(null);
+
+  const handleRegenerateFrame = async (beat: Beat) => {
+    setRegeneratingBeat(beat.beatNumber);
+    try {
+      const result = await generateStoryboardFrames([beat]);
+      if (result.frames[0]) {
+        const updated = { ...scriptment };
+        updated.acts.forEach((act) => {
+          act.beats.forEach((b) => {
+            if (b.beatNumber === beat.beatNumber) {
+              b.storyboardFrame = `data:image/png;base64,${result.frames[0]}`;
+            }
+          });
+        });
+        setScriptment(updated);
+        // Keep lightbox up-to-date
+        setLightboxBeat((prev) =>
+          prev && prev.beatNumber === beat.beatNumber
+            ? { ...prev, storyboardFrame: `data:image/png;base64,${result.frames[0]}` }
+            : prev
+        );
+      }
+    } catch (err: any) {
+      setError(err.message || "Frame regeneration failed.");
+    } finally {
+      setRegeneratingBeat(null);
     }
   };
 
@@ -248,7 +279,7 @@ export default function Scriptment() {
 
               {/* Info */}
               <div className="mt-4 flex items-start justify-between">
-                <div>
+                <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-2">
                     <span className="font-mono-tech text-[10px] text-[#C8956C]">
                       BEAT {lightboxBeat.beatNumber}
@@ -258,11 +289,30 @@ export default function Scriptment() {
                     </span>
                   </div>
                   <p className="text-sm text-[#F0EBE3] mb-1">{lightboxBeat.description}</p>
-                  <p className="text-xs text-[#8A8279]">{lightboxBeat.motivation}</p>
+                  <p className="text-xs text-[#8A8279] mb-3">{lightboxBeat.motivation}</p>
+                  <DirectorNote
+                    text={`Shot ${lightboxBeat.beatNumber}. ${lightboxBeat.description}. ${lightboxBeat.motivation}`}
+                    label="Listen"
+                  />
+                  <div className="mt-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRegenerateFrame(lightboxBeat);
+                      }}
+                      disabled={regeneratingBeat === lightboxBeat.beatNumber}
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white/[0.04] hover:bg-white/[0.08] text-[#8A8279] hover:text-[#F0EBE3] rounded-lg transition-all duration-150 text-xs disabled:opacity-30"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${regeneratingBeat === lightboxBeat.beatNumber ? "animate-spin" : ""}`} />
+                      <span className="font-mono-tech text-[10px]">
+                        {regeneratingBeat === lightboxBeat.beatNumber ? "Generating..." : "Regenerate Frame"}
+                      </span>
+                    </button>
+                  </div>
                 </div>
                 <button
                   onClick={() => setLightboxBeat(null)}
-                  className="p-2 text-[#8A8279] hover:text-[#F0EBE3] hover:bg-white/[0.04] rounded-lg transition-all"
+                  className="p-2 text-[#8A8279] hover:text-[#F0EBE3] hover:bg-white/[0.04] rounded-lg transition-all shrink-0"
                 >
                   <X className="w-5 h-5" />
                 </button>

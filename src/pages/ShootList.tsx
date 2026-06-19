@@ -5,6 +5,7 @@ import { ArrowLeft, Check, Download } from "lucide-react";
 import { defaultGear } from "@/data/demo";
 import type { Scriptment } from "@/types";
 import { generateShootList } from "@/services/api";
+import DirectorNote from "@/components/DirectorNote";
 
 export default function ShootList() {
   const location = useLocation();
@@ -61,6 +62,50 @@ export default function ShootList() {
       else next.add(beatNum);
       return next;
     });
+  };
+
+  const handleExport = () => {
+    const lines: string[] = [];
+    lines.push(`# Shoot List: ${scriptment.title}`);
+    lines.push(`\n**Total Shots:** ${shots.length}`);
+    lines.push(`\n---\n`);
+
+    scriptment.acts.forEach((act) => {
+      const actShots = shotsByAct[act.actNumber] || [];
+      if (actShots.length === 0) return;
+
+      lines.push(`## Act ${act.actNumber}: ${act.title}\n`);
+
+      actShots.forEach((shot) => {
+        const cs = shot.cameraSettings;
+        lines.push(`### Shot ${shot.beatNumber} — ${shot.shotType}`);
+        lines.push(`**Description:** ${shot.description}`);
+        if (shot.motivation) lines.push(`**Motivation:** ${shot.motivation}`);
+        if (cs) {
+          lines.push(``);
+          lines.push(`| Setting | Value |`);
+          lines.push(`|---------|-------|`);
+          lines.push(`| Lens | ${cs.lens || "—"} |`);
+          lines.push(`| Aperture | ${cs.aperture || "—"} |`);
+          lines.push(`| Shutter | ${cs.shutter || "—"} |`);
+          lines.push(`| ISO | ${cs.iso || "—"} |`);
+          lines.push(`| White Balance | ${cs.whiteBalance || "—"} |`);
+          lines.push(`| Picture Profile | ${cs.pictureProfile || "—"} |`);
+          lines.push(`| Composition | ${cs.composition || "—"} |`);
+          if (cs.notes) lines.push(`| Notes | ${cs.notes} |`);
+        }
+        lines.push(`\n---\n`);
+      });
+    });
+
+    const markdown = lines.join("\n");
+    const blob = new Blob([markdown], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${scriptment.title.replace(/[^a-zA-Z0-9]/g, "_")}_shoot_list.md`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   // Group shots by act
@@ -284,6 +329,17 @@ export default function ShootList() {
                               Note: {shot.cameraSettings.notes}
                             </p>
                           )}
+
+                          <div className="mt-2">
+                            <DirectorNote
+                              text={`Shot ${shot.beatNumber}. ${shot.description}. ${
+                                shot.cameraSettings?.composition 
+                                  ? shot.cameraSettings.composition 
+                                  : ""
+                              }`}
+                              label="Director Note"
+                            />
+                          </div>
                         </div>
                       </div>
                     </motion.div>
@@ -296,7 +352,10 @@ export default function ShootList() {
 
         {/* Export FAB */}
         <div className="fixed bottom-6 right-6">
-          <button className="flex items-center gap-2 px-4 py-3 bg-[#C8956C] hover:bg-[#D4A67E] text-[#0F0F0F] text-sm font-medium rounded-full shadow-lg shadow-[#C8956C]/20 transition-all duration-150 hover:scale-105">
+          <button
+            onClick={handleExport}
+            className="flex items-center gap-2 px-4 py-3 bg-[#C8956C] hover:bg-[#D4A67E] text-[#0F0F0F] text-sm font-medium rounded-full shadow-lg shadow-[#C8956C]/20 transition-all duration-150 hover:scale-105"
+          >
             <Download className="w-4 h-4" />
             <span>Export Field Guide</span>
           </button>
