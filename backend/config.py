@@ -13,6 +13,9 @@ BASE_DIR = Path(__file__).parent
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
 DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
 
+GROK_API_KEY = os.getenv("GROK_API_KEY", "")
+GROK_BASE_URL = os.getenv("GROK_BASE_URL", "https://api.x.ai/v1")
+
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
 

@@ -17,6 +17,8 @@ async def lifespan(app: FastAPI):
     # Startup
     print("🎬 Director's Eye backend starting...")
     print(f"   DeepSeek API: {'Configured' if os.getenv('DEEPSEEK_API_KEY') else 'NOT CONFIGURED'}")
+    print(f"   Grok (xAI) API: {'Configured' if os.getenv('GROK_API_KEY') else 'NOT CONFIGURED'}")
+    print(f"   OpenAI API: {'Configured' if os.getenv('OPENAI_API_KEY') else 'NOT CONFIGURED'}")
     print(f"   Gemini API: {'Configured' if os.getenv('GEMINI_API_KEY') else 'NOT CONFIGURED (will use Pollinations fallback)'}")
     yield
     # Shutdown
@@ -25,7 +27,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Director's Eye",
-    description="Personal AI film director backend — uses external APIs (DeepSeek, Gemini, Pollinations)",
+    description="Personal AI film director backend — uses external APIs (DeepSeek, Grok, OpenAI, Gemini, Pollinations)",
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -50,10 +52,12 @@ app.include_router(settings_gear.router)
 # Health check
 @app.get("/health")
 async def health():
-    from config import DEEPSEEK_API_KEY, GEMINI_API_KEY
+    from config import DEEPSEEK_API_KEY, GROK_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY
     return {
         "status": "ok",
         "deepseek_configured": bool(DEEPSEEK_API_KEY),
+        "grok_configured": bool(GROK_API_KEY),
+        "openai_configured": bool(OPENAI_API_KEY),
         "gemini_configured": bool(GEMINI_API_KEY),
         "mode": "external_api",
     }

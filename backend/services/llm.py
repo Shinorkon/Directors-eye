@@ -6,6 +6,7 @@ from typing import AsyncGenerator
 
 from config import (
     DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL,
+    GROK_API_KEY, GROK_BASE_URL,
     OPENAI_API_KEY, OPENAI_BASE_URL,
     GEMINI_API_KEY, GEMINI_BASE_URL,
 )
@@ -14,7 +15,7 @@ from services.prompt_builder import SCRIPTMENT_SYSTEM_PROMPT
 
 
 class LLMClient:
-    """Unified client that tries DeepSeek → OpenAI → Gemini in order of availability."""
+    """Unified client that tries DeepSeek → Grok → OpenAI → Gemini in order of availability (cheapest first)."""
 
     def __init__(self):
         self.provider = self._detect_provider()
@@ -22,6 +23,8 @@ class LLMClient:
     def _detect_provider(self) -> str:
         if DEEPSEEK_API_KEY:
             return "deepseek"
+        if GROK_API_KEY:
+            return "grok"
         if OPENAI_API_KEY:
             return "openai"
         if GEMINI_API_KEY:
@@ -35,6 +38,8 @@ class LLMClient:
 
         if self.provider == "deepseek":
             return await self._generate_deepseek(concept)
+        elif self.provider == "grok":
+            return await self._generate_grok(concept)
         elif self.provider == "openai":
             return await self._generate_openai(concept)
         elif self.provider == "gemini":
@@ -58,6 +63,33 @@ class LLMClient:
                 headers=headers,
                 json={
                     "model": "deepseek-v4-flash",
+                    "messages": messages,
+                    "temperature": 0.7,
+                    "max_tokens": 4000,
+                    "response_format": {"type": "json_object"},
+                },
+            )
+            response.raise_for_status()
+            data = response.json()
+            content = data["choices"][0]["message"]["content"]
+            return json.loads(content)
+
+    async def _generate_grok(self, concept: str) -> dict:
+        headers = {
+            "Authorization": f"Bearer {GROK_API_KEY}",
+            "Content-Type": "application/json",
+        }
+        messages = [
+            {"role": "system", "content": SCRIPTMENT_SYSTEM_PROMPT},
+            {"role": "user", "content": concept},
+        ]
+
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(
+                f"{GROK_BASE_URL}/chat/completions",
+                headers=headers,
+                json={
+                    "model": "grok-3",
                     "messages": messages,
                     "temperature": 0.7,
                     "max_tokens": 4000,
@@ -147,18 +179,26 @@ class LLMClient:
 
     async def stream_scriptment(self, concept: str) -> AsyncGenerator[str, None]:
         """Stream Scriptment generation tokens (DeepSeek/OpenAI only)."""
-        if self.provider not in ("deepseek", "openai"):
+        if self.provider not in ("deepseek", "grok", "openai"):
             # Gemini doesn't support streaming JSON well, yield full response
             result = await self.generate_scriptment(concept)
             yield json.dumps(result)
             return
 
+        api_key = DEEPSEEK_API_KEY if self.provider == 'deepseek' else (GROK_API_KEY if self.provider == 'grok' else OPENAI_API_KEY)
         headers = {
-            "Authorization": f"Bearer {DEEPSEEK_API_KEY if self.provider == 'deepseek' else OPENAI_API_KEY}",
+            "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         }
-        base_url = DEEPSEEK_BASE_URL if self.provider == "deepseek" else OPENAI_BASE_URL
-        model = "deepseek-v4-flash" if self.provider == "deepseek" else "gpt-4o-mini"
+        if self.provider == "deepseek":
+            base_url = DEEPSEEK_BASE_URL
+            model = "deepseek-v4-flash"
+        elif self.provider == "grok":
+            base_url = GROK_BASE_URL
+            model = "grok-3"
+        else:
+            base_url = OPENAI_BASE_URL
+            model = "gpt-4o-mini"
 
         messages = [
             {"role": "system", "content": SCRIPTMENT_SYSTEM_PROMPT},
