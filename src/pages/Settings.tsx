@@ -1,15 +1,36 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Save } from "lucide-react";
+import { Save, Loader2 } from "lucide-react";
+import { getSettingsAPI, saveSettingAPI } from "@/services/api";
 
 export default function Settings() {
   const [autoStoryboard, setAutoStoryboard] = useState(true);
   const [autoShootList, setAutoShootList] = useState(true);
   const [saved, setSaved] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  // Load from VPS on mount
+  useEffect(() => {
+    getSettingsAPI()
+      .then((settings) => {
+        if (settings?.autoStoryboard !== undefined) setAutoStoryboard(settings.autoStoryboard);
+        if (settings?.autoShootList !== undefined) setAutoShootList(settings.autoShootList);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleSave = async () => {
+    try {
+      await Promise.all([
+        saveSettingAPI("autoStoryboard", autoStoryboard),
+        saveSettingAPI("autoShootList", autoShootList),
+      ]);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      console.warn("Failed to save settings:", err);
+    }
   };
 
   const ToggleSwitch = ({
@@ -32,6 +53,14 @@ export default function Settings() {
       />
     </button>
   );
+
+  if (loading) {
+    return (
+      <div className="min-h-screen pt-14 flex items-center justify-center">
+        <Loader2 className="w-4 h-4 animate-spin text-[#8A8279]" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen pt-14">

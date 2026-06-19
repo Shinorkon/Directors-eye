@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
-from routers import scriptment, storyboard, shootlist, voice
+from routers import scriptment, storyboard, shootlist, voice, projects, settings_gear
 
 
 @asynccontextmanager
@@ -44,6 +44,8 @@ app.include_router(scriptment.router)
 app.include_router(storyboard.router)
 app.include_router(shootlist.router)
 app.include_router(voice.router)
+app.include_router(projects.router)
+app.include_router(settings_gear.router)
 
 # Health check
 @app.get("/health")

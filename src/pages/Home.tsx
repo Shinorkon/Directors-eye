@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { Sparkles, MessageSquare, LayoutGrid, ListChecks, AlertCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { samplePrompts } from "@/data/demo";
-import { generateScriptment, generateStoryboardFrames } from "@/services/api";
+import { generateScriptment, generateStoryboardFrames, saveProject } from "@/services/api";
 
 export default function Home() {
   const [concept, setConcept] = useState("");
@@ -40,7 +40,12 @@ export default function Home() {
         }
       });
 
-      // 4. Navigate to Scriptment page
+      // 4. Auto-save to VPS (fire-and-forget)
+      saveProject({ scriptment, hero_frame: frames[0] ? `data:image/png;base64,${frames[0]}` : "" })
+        .then(() => console.log("[Save] Project saved to VPS"))
+        .catch((err) => console.warn("[Save] Failed to save project:", err));
+
+      // 5. Navigate to Scriptment page
       navigate("/scriptment", { state: { scriptment } });
     } catch (err: any) {
       console.error(err);

@@ -34,5 +34,16 @@ Thumbs.db
 *.log
 npm-debug.log*
 
+# Runtime data
+backend/data/
+*.db
+
+# Vite
+vite.config.ts.timestamp-*
+
+# Logs
+*.log
+npm-debug.log*
+
 # Vite
 vite.config.ts.timestamp-*

@@ -1,13 +1,27 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Film, Plus } from "lucide-react";
-import { sampleProject } from "@/data/demo";
-import type { Project } from "@/types";
+import { useNavigate } from "react-router-dom";
+import { Film, Plus, Trash2, Loader2 } from "lucide-react";
+import { useProjects } from "@/hooks/use-projects";
 
 export default function Archive() {
   const navigate = useNavigate();
-  const [projects] = useState<Project[]>([sampleProject]);
+  const { projects, loading, remove } = useProjects();
+
+  const handleDelete = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    await remove(id);
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen pt-14 flex items-center justify-center">
+        <div className="flex items-center gap-2 text-[#8A8279]">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          <span className="text-sm">Loading projects...</span>
+        </div>
+      </div>
+    );
+  }
 
   if (projects.length === 0) {
     return (
@@ -63,18 +77,33 @@ export default function Archive() {
               transition={{ duration: 0.4, delay: i * 0.1 }}
               onClick={() =>
                 navigate("/scriptment", {
-                  state: { concept: project.title },
+                  state: { projectId: project.id },
                 })
               }
-              className="bg-[#1A1A1A] border border-white/[0.06] rounded-lg overflow-hidden cursor-pointer group hover:bg-[#232323] hover:border-white/[0.12] transition-all duration-150"
+              className="bg-[#1A1A1A] border border-white/[0.06] rounded-lg overflow-hidden cursor-pointer group hover:bg-[#232323] hover:border-white/[0.12] transition-all duration-150 relative"
             >
+              {/* Delete button */}
+              <button
+                onClick={(e) => handleDelete(e, project.id)}
+                className="absolute top-2 right-2 z-10 p-1.5 bg-black/40 backdrop-blur-sm rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-150 text-[#8A8279] hover:text-red-400 hover:bg-black/60"
+                title="Delete project"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+
               {/* Hero Frame */}
               <div className="aspect-video bg-[#232323] overflow-hidden">
-                <img
-                  src={project.heroFrame}
-                  alt={project.title}
-                  className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
-                />
+                {project.hero_frame ? (
+                  <img
+                    src={project.hero_frame}
+                    alt={project.title}
+                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <Film className="w-8 h-8 text-[#3A3530]" />
+                  </div>
+                )}
               </div>
 
               {/* Info */}
@@ -84,11 +113,16 @@ export default function Archive() {
                 </h3>
                 <div className="flex items-center gap-3">
                   <span className="font-mono-tech text-[10px] text-[#8A8279]">
-                    {project.createdAt}
+                    {new Date(project.created_at).toLocaleDateString()}
                   </span>
                   <span className="font-mono-tech text-[10px] text-[#5A544D]">
-                    {project.shotCount} shots
+                    {project.shot_count} shots
                   </span>
+                  {project.completed_shots > 0 && (
+                    <span className="font-mono-tech text-[10px] text-[#7BAE7F]">
+                      {project.completed_shots}/{project.shot_count} done
+                    </span>
+                  )}
                 </div>
               </div>
             </motion.div>

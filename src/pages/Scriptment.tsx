@@ -1,32 +1,62 @@
 import { useState, useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, RefreshCw, Download, X } from "lucide-react";
+import { ArrowLeft, RefreshCw, Download, X, Loader2 } from "lucide-react";
 import { sampleScriptment } from "@/data/demo";
 import type { Beat, Scriptment } from "@/types";
 import BeatCard from "@/components/BeatCard";
 import StoryboardFrame from "@/components/StoryboardFrame";
 import DirectorNote from "@/components/DirectorNote";
-import { generateScriptment, generateStoryboardFrames } from "@/services/api";
+import { generateScriptment, generateStoryboardFrames, getProject } from "@/services/api";
 
 export default function Scriptment() {
   const location = useLocation();
   const navigate = useNavigate();
   const passedScriptment = (location.state as { scriptment?: Scriptment })?.scriptment;
   const passedConcept = (location.state as { concept?: string })?.concept || "";
+  const projectId = (location.state as { projectId?: string })?.projectId;
 
-  const [scriptment, setScriptment] = useState<Scriptment>(passedScriptment || sampleScriptment);
+  const [scriptment, setScriptment] = useState<Scriptment | null>(null);
+  const [loadingProject, setLoadingProject] = useState(!!projectId);
   const [activeBeat, setActiveBeat] = useState(1);
   const [lightboxBeat, setLightboxBeat] = useState<Beat | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [title, setTitle] = useState(scriptment.title);
+  const [title, setTitle] = useState("");
   const [error, setError] = useState<string | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const beatRefs = useRef<Record<number, HTMLDivElement>>({});
 
+  // Load project from VPS if projectId is provided
+  useEffect(() => {
+    if (projectId) {
+      setLoadingProject(true);
+      getProject(projectId)
+        .then((data) => {
+          if (data?.scriptment) {
+            setScriptment(data.scriptment);
+            setTitle(data.scriptment.title || "Untitled");
+          } else {
+            setScriptment(sampleScriptment);
+            setTitle(sampleScriptment.title);
+          }
+        })
+        .catch(() => {
+          setScriptment(sampleScriptment);
+          setTitle(sampleScriptment.title);
+        })
+        .finally(() => setLoadingProject(false));
+    } else if (passedScriptment) {
+      setScriptment(passedScriptment);
+      setTitle(passedScriptment.title);
+    } else {
+      setScriptment(sampleScriptment);
+      setTitle(sampleScriptment.title);
+    }
+  }, [projectId, passedScriptment]);
+
   // Auto-trigger storyboard generation if we have a real scriptment without frames
   useEffect(() => {
-    if (passedScriptment && !passedScriptment.acts.some(a => a.beats.some(b => b.storyboardFrame))) {
+    if (scriptment && passedScriptment && !passedScriptment.acts.some(a => a.beats.some(b => b.storyboardFrame))) {
       setIsGenerating(true);
       setError(null);
 
@@ -52,9 +82,9 @@ export default function Scriptment() {
         })
         .finally(() => setIsGenerating(false));
     }
-  }, [passedScriptment]);
+  }, [scriptment, passedScriptment]);
 
-  const allBeats = scriptment.acts.flatMap((act) => act.beats);
+  const allBeats = scriptment?.acts.flatMap((act) => act.beats) || [];
 
   const handleBeatClick = (beatNum: number) => {
     setActiveBeat(beatNum);
@@ -91,6 +121,7 @@ export default function Scriptment() {
   const [regeneratingBeat, setRegeneratingBeat] = useState<number | null>(null);
 
   const handleRegenerateFrame = async (beat: Beat) => {
+    if (!scriptment) return;
     setRegeneratingBeat(beat.beatNumber);
     try {
       const result = await generateStoryboardFrames([beat]);
@@ -117,6 +148,34 @@ export default function Scriptment() {
       setRegeneratingBeat(null);
     }
   };
+
+  // Loading state for VPS-fetched projects
+  if (loadingProject) {
+    return (
+      <div className="min-h-screen pt-14 flex items-center justify-center">
+        <div className="flex items-center gap-2 text-[#8A8279]">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          <span className="text-sm">Loading project...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!scriptment) {
+    return (
+      <div className="min-h-screen pt-14 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-[#8A8279] mb-4">No scriptment loaded.</p>
+          <button
+            onClick={() => navigate("/")}
+            className="px-4 py-2 bg-[#C8956C] text-[#0F0F0F] text-sm rounded-lg"
+          >
+            Create New Project
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen pt-14">

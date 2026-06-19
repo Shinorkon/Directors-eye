@@ -1,16 +1,43 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Camera, Save, Check } from "lucide-react";
+import { Camera, Save, Check, Loader2 } from "lucide-react";
 import { defaultGear } from "@/data/demo";
+import { getGearAPI, saveGearAPI } from "@/services/api";
 
 export default function Gear() {
   const [gear, setGear] = useState(defaultGear);
   const [saved, setSaved] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  // Load from VPS on mount
+  useEffect(() => {
+    getGearAPI()
+      .then((data) => {
+        if (data?.profile) {
+          setGear(data.profile);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleSave = async () => {
+    try {
+      await saveGearAPI(gear);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      console.warn("Failed to save gear:", err);
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen pt-14 flex items-center justify-center">
+        <Loader2 className="w-4 h-4 animate-spin text-[#8A8279]" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen pt-14">
