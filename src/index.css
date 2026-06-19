@@ -1,0 +1,147 @@
+@import "@fontsource/dm-serif-display/400.css";
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 6%;
+    --foreground: 40 20% 92%;
+    --card: 0 0% 10%;
+    --card-foreground: 40 20% 92%;
+    --popover: 0 0% 10%;
+    --popover-foreground: 40 20% 92%;
+    --primary: 28 38% 60%;
+    --primary-foreground: 0 0% 6%;
+    --secondary: 0 0% 14%;
+    --secondary-foreground: 40 20% 92%;
+    --muted: 0 0% 14%;
+    --muted-foreground: 30 8% 51%;
+    --accent: 28 38% 60%;
+    --accent-foreground: 0 0% 6%;
+    --destructive: 4 45% 60%;
+    --destructive-foreground: 40 20% 92%;
+    --border: 0 0% 100% / 0.06;
+    --input: 0 0% 14%;
+    --ring: 28 38% 60%;
+    --radius: 0.5rem;
+  }
+
+  * {
+    @apply border-[rgba(255,255,255,0.06)];
+  }
+
+  body {
+    @apply bg-[#0F0F0F] text-[#F0EBE3] antialiased;
+    font-family: "Inter", sans-serif;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+@layer components {
+  .font-serif-display {
+    font-family: "DM Serif Display", serif;
+  }
+
+  .font-mono-tech {
+    font-family: "JetBrains Mono", monospace;
+  }
+
+  .grain-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    pointer-events: none;
+    opacity: 0.03;
+    mix-blend-mode: overlay;
+  }
+
+  .cinematic-frame {
+    position: relative;
+    aspect-ratio: 2.39 / 1;
+    overflow: hidden;
+    border: 2px solid #2A2520;
+    border-radius: 4px;
+  }
+
+  .cinematic-frame::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.25) 100%);
+    pointer-events: none;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.1);
+    border-radius: 2px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: rgba(255,255,255,0.2);
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+/* Animations */
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 1.5s ease-in-out infinite;
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.5s cubic-bezier(0, 0, 0.2, 1) forwards;
+}
