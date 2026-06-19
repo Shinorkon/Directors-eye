@@ -1,4 +1,4 @@
-const API_BASE = "http://37.60.229.74:8080/api";
+const API_BASE = "https://directors-eye.shinorkon.com/api";
 
 export async function generateScriptment(concept: string) {
   const res = await fetch(`${API_BASE}/scriptment/generate`, {
