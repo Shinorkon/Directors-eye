@@ -48,6 +48,34 @@ SUBJECT_EXPANSIONS = {
     "artist": "an artist at work, paint-stained hands, focused gaze barely visible beneath a brimmed hat",
 }
 
+# Anti-tourism keywords — replaces tourism language when mode is ON
+ANTI_TOURISM_REPLACEMENTS = {
+    "beautiful": "honest",
+    "stunning": "unpolished",
+    "paradise": "everyday",
+    "turquoise": "grey-green",
+    "white sand": "weathered concrete",
+    "pristine": "functional",
+    "luxury": "practical",
+    "resort": "apartment block",
+    "tropical": "coastal urban",
+    "exotic": "local",
+}
+
+ANTI_TOURISM_SUFFIX = (
+    "Avoid tourism imagery. Focus on: concrete, diesel generators, "
+    "fishing nets, weathered surfaces, narrow alleyways, construction sites, "
+    "local cafes, harbor machinery, rust, stacked crates, laundry lines, "
+    "fluorescent lights, peeling paint, power lines."
+)
+
+# Tourism keywords that get stripped when anti_tourism is ON
+TOURISM_KEYWORDS = [
+    "paradise", "turquoise", "white sand", "pristine beach", "overwater bungalow",
+    "luxury resort", "tropical paradise", "crystal clear", "sunset cruise",
+    "coconut", "hammock", "swim-up bar", "private island",
+]
+
 # Default concept expansions when no specific subject is matched
 DEFAULT_EXPANSIONS = [
     "soft natural light creates depth and atmosphere",
@@ -154,18 +182,26 @@ class ConceptEnricher:
                     return expansion
         return None
 
-    def enrich(self, concept_text: str) -> EnrichedConcept:
+    def enrich(self, concept_text: str, anti_tourism: bool = False) -> EnrichedConcept:
         """Full enrichment pipeline: extract → infer → expand → return."""
         defaults_applied = []
 
+        # Step 0: Strip tourism keywords if anti_tourism mode is ON
+        processed_text = concept_text
+        if anti_tourism:
+            for kw in TOURISM_KEYWORDS:
+                processed_text = processed_text.replace(kw, "")
+                processed_text = processed_text.replace(kw.capitalize(), "")
+            processed_text = processed_text.strip()
+
         # Step 1: Keyword extraction
-        raw_keywords = self._extract_keywords(concept_text)
+        raw_keywords = self._extract_keywords(processed_text)
         keywords = [(kw, score) for kw, score in raw_keywords if len(kw) > 2]
 
         # Step 2: Detect categories
-        time_of_day = self._detect_category(concept_text, TIME_KEYWORDS)
-        mood = self._detect_category(concept_text, MOOD_KEYWORDS)
-        location = self._detect_category(concept_text, LOCATION_KEYWORDS)
+        time_of_day = self._detect_category(processed_text, TIME_KEYWORDS)
+        mood = self._detect_category(processed_text, MOOD_KEYWORDS)
+        location = self._detect_category(processed_text, LOCATION_KEYWORDS)
 
         # Step 3: Apply defaults for missing info
         if not time_of_day:
@@ -188,7 +224,7 @@ class ConceptEnricher:
         if subject_expansion:
             expanded = subject_expansion
         else:
-            expanded = concept_text
+            expanded = processed_text
 
         # Add time + mood descriptors
         if time_of_day:
@@ -200,6 +236,16 @@ class ConceptEnricher:
         # Add location if found
         if location and location not in expanded.lower():
             expanded += f", set in a {location}"
+
+        # Step 5: Apply anti-tourism transformations
+        if anti_tourism:
+            # Replace tourism language
+            for tourism_word, replacement in ANTI_TOURISM_REPLACEMENTS.items():
+                expanded = expanded.replace(tourism_word, replacement)
+                expanded = expanded.replace(tourism_word.capitalize(), replacement.capitalize())
+            # Append anti-tourism directive
+            expanded += ". " + ANTI_TOURISM_SUFFIX
+            defaults_applied.append("anti_tourism mode: tourism language stripped, gritty focus added")
 
         return EnrichedConcept(
             original=concept_text,

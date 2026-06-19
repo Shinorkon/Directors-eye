@@ -2,11 +2,19 @@ import type { Scriptment, Beat } from "@/types";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api";
 
-export async function generateScriptment(concept: string): Promise<Scriptment> {
+export async function generateScriptment(
+  concept: string,
+  mode?: string,
+  antiTourism?: boolean
+): Promise<Scriptment> {
   const res = await fetch(`${API_BASE}/scriptment/generate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ concept }),
+    body: JSON.stringify({
+      concept,
+      mode: mode || "normal",
+      anti_tourism: antiTourism || false,
+    }),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();

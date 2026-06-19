@@ -15,6 +15,8 @@ export default function Scriptment() {
   const passedScriptment = (location.state as { scriptment?: Scriptment })?.scriptment;
   const passedConcept = (location.state as { concept?: string })?.concept || "";
   const projectId = (location.state as { projectId?: string })?.projectId;
+  const currentMode = (location.state as { mode?: string })?.mode || "normal";
+  const currentAntiTourism = (location.state as { antiTourism?: boolean })?.antiTourism || false;
 
   const [scriptment, setScriptment] = useState<Scriptment | null>(null);
   const [loadingProject, setLoadingProject] = useState(!!projectId);
@@ -195,6 +197,17 @@ export default function Scriptment() {
               onChange={(e) => setTitle(e.target.value)}
               className="bg-transparent font-serif-display text-lg text-[#F0EBE3] focus:outline-none focus:text-[#C8956C] transition-colors border-b border-transparent focus:border-[#C8956C]/30 pb-0.5"
             />
+            {/* Mode Badges */}
+            {currentMode !== "normal" && (
+              <span className="font-mono-tech text-[10px] text-[#C8956C] bg-[#C8956C]/10 px-2 py-1 rounded-full">
+                {currentMode.replace("_", " ").replace(/\b\w/g, (c: string) => c.toUpperCase())}
+              </span>
+            )}
+            {currentAntiTourism && (
+              <span className="font-mono-tech text-[10px] text-[#8A8279] bg-white/[0.04] px-2 py-1 rounded-full">
+                Anti-Tourism
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-2">

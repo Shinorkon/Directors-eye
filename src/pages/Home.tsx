@@ -1,14 +1,24 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Sparkles, MessageSquare, LayoutGrid, ListChecks, AlertCircle } from "lucide-react";
+import { Sparkles, MessageSquare, LayoutGrid, ListChecks, AlertCircle, ShieldBan } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { samplePrompts } from "@/data/demo";
 import { generateScriptment, generateStoryboardFrames, saveProject } from "@/services/api";
+
+const MODES = [
+  { id: "normal", label: "Normal", icon: "🎬", desc: "Full creative freedom" },
+  { id: "solo_crew", label: "Solo Crew", icon: "🎒", desc: "You + one helper, one lens" },
+  { id: "minimal", label: "Minimal", icon: "📦", desc: "Natural light, no gimbal" },
+  { id: "guerrilla", label: "Guerrilla", icon: "🏃", desc: "Single prime, handheld" },
+  { id: "studio", label: "Studio", icon: "💡", desc: "Controlled interior, tripod" },
+];
 
 export default function Home() {
   const [concept, setConcept] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mode, setMode] = useState("normal");
+  const [antiTourism, setAntiTourism] = useState(false);
   const navigate = useNavigate();
 
   const handleGenerate = async () => {
@@ -17,8 +27,8 @@ export default function Home() {
     setError(null);
 
     try {
-      // 1. Generate Scriptment via DeepSeek API
-      const scriptment = await generateScriptment(concept);
+      // 1. Generate Scriptment with mode & anti-tourism options
+      const scriptment = await generateScriptment(concept, mode, antiTourism);
 
       // 2. Generate storyboard frames via external image API
       const allBeats = scriptment.acts.flatMap((a: any) => a.beats);
@@ -46,7 +56,7 @@ export default function Home() {
         .catch((err) => console.warn("[Save] Failed to save project:", err));
 
       // 5. Navigate to Scriptment page
-      navigate("/scriptment", { state: { scriptment } });
+      navigate("/scriptment", { state: { scriptment, mode, antiTourism } });
     } catch (err: any) {
       console.error(err);
       setError(err.message || "Failed to generate scriptment. Please check your API key configuration.");
@@ -129,6 +139,62 @@ export default function Home() {
             </div>
           </div>
 
+          {/* Mode Selector */}
+          <div className="mt-4">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="font-mono-tech text-[10px] text-[#5A544D] uppercase tracking-wider">Shoot Mode</span>
+              {mode !== "normal" && (
+                <span className="text-[10px] text-[#C8956C] bg-[#C8956C]/10 px-1.5 py-0.5 rounded font-mono-tech">
+                  {MODES.find((m) => m.id === mode)?.label} — saves tokens
+                </span>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {MODES.map((m) => (
+                <button
+                  key={m.id}
+                  onClick={() => setMode(m.id)}
+                  disabled={isGenerating}
+                  className={`px-3 py-2 rounded-lg text-xs transition-all duration-150 border ${
+                    mode === m.id
+                      ? "bg-[#C8956C]/20 border-[#C8956C]/40 text-[#C8956C]"
+                      : "bg-[#1A1A1A] border-white/[0.06] text-[#8A8279] hover:text-[#F0EBE3] hover:border-white/[0.12]"
+                  } disabled:opacity-30`}
+                  title={m.desc}
+                >
+                  <span className="mr-1">{m.icon}</span>
+                  {m.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Anti-Tourism Toggle */}
+          <div className="mt-3 flex items-center justify-between bg-[#1A1A1A] border border-white/[0.06] rounded-lg px-4 py-3">
+            <div className="flex items-center gap-3">
+              <ShieldBan className={`w-4 h-4 ${antiTourism ? "text-[#C8956C]" : "text-[#5A544D]"}`} />
+              <div>
+                <span className="text-sm text-[#F0EBE3] block">Anti-Tourism Mode</span>
+                <span className="text-xs text-[#8A8279]">
+                  Strip tourism language — focus on honest, gritty reality
+                </span>
+              </div>
+            </div>
+            <button
+              onClick={() => setAntiTourism(!antiTourism)}
+              disabled={isGenerating}
+              className={`relative w-10 h-5 rounded-full transition-colors duration-150 ${
+                antiTourism ? "bg-[#C8956C]" : "bg-white/[0.1]"
+              } disabled:opacity-30`}
+            >
+              <span
+                className={`absolute top-0.5 w-4 h-4 rounded-full bg-[#F0EBE3] transition-transform duration-150 ${
+                  antiTourism ? "left-[22px]" : "left-0.5"
+                }`}
+              />
+            </button>
+          </div>
+
           <button
             onClick={handleGenerate}
             disabled={!concept.trim() || isGenerating}
@@ -150,7 +216,7 @@ export default function Home() {
       </section>
 
       {/* Quick Prompts */}
-      <section className="px-6 pb-16">
+      <section className="px-6 pb-12">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -218,7 +284,7 @@ export default function Home() {
       {/* Footer */}
       <footer className="px-6 pb-8 text-center">
         <p className="font-mono-tech text-[10px] text-[#5A544D]">
-          Scriptment generation via DeepSeek API. Storyboard frames via Gemini / Pollinations. No local AI required.
+          Scriptment generation via DeepSeek/Grok/OpenAI/Gemini. Storyboard frames via Gemini / Pollinations. No local AI required.
         </p>
       </footer>
     </div>

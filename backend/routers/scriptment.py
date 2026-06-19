@@ -13,6 +13,7 @@ from services.beat_engine import BeatTemplateEngine, EmotionalArc
 from services.grammar_validator import FilmGrammarValidator
 from services.concept_enricher import get_enricher
 from services.shoot_scheduler import get_scheduler
+from services.modes import ConstraintMode, apply_constraints, MODE_META
 
 router = APIRouter(prefix="/api/scriptment", tags=["Scriptment"])
 
@@ -21,6 +22,8 @@ class ConceptRequest(BaseModel):
     concept: str
     stream: bool = False
     emotional_arc: str = ""  # Optional: override auto-detection
+    mode: str = "normal"  # normal, solo_crew, minimal, guerrilla, studio
+    anti_tourism: bool = False  # Strip tourism language, focus on gritty realism
 
 
 class ScriptmentResponse(BaseModel):
@@ -36,7 +39,7 @@ async def generate_scriptment(request: ConceptRequest):
 
     # Step 1: Enrich concept — extract keywords, infer time/mood
     enricher = get_enricher()
-    enriched = enricher.enrich(request.concept)
+    enriched = enricher.enrich(request.concept, anti_tourism=request.anti_tourism)
 
     # Step 2: Select emotional arc — use requested or infer from mood
     if request.emotional_arc:
@@ -50,6 +53,13 @@ async def generate_scriptment(request: ConceptRequest):
     # Step 3: Generate beat template — entirely deterministic code, no AI
     engine = BeatTemplateEngine(arc=arc)
     beats = engine.generate_template()
+
+    # Step 3b: Apply constraint mode — code, not AI
+    try:
+        mode = ConstraintMode(request.mode)
+    except ValueError:
+        mode = ConstraintMode.NORMAL
+    beats = apply_constraints(beats, mode)
 
     # Step 4: LLM writes descriptions only (the creative part)
     client = get_llm_client()
@@ -72,6 +82,8 @@ async def generate_scriptment(request: ConceptRequest):
         **scriptment,
         "_meta": {
             "emotional_arc": arc.value,
+            "mode": mode.value,
+            "anti_tourism": request.anti_tourism,
             "enriched_concept": enriched.to_dict(),
             "corrections": [i.to_dict() for i in issues],
             "from_cache": False,
@@ -89,16 +101,24 @@ async def stream_scriptment(request: ConceptRequest):
     client = get_llm_client()
 
     async def token_stream():
-        yield json.dumps({"step": "enriching"}) + "\n"
+        yield json.dumps({"step": "enriching", "mode": request.mode, "anti_tourism": request.anti_tourism}) + "\n"
 
         enricher = get_enricher()
-        enriched = enricher.enrich(request.concept)
+        enriched = enricher.enrich(request.concept, anti_tourism=request.anti_tourism)
         yield json.dumps({"step": "structuring", "concept": enriched.to_dict()}) + "\n"
 
         arc = _infer_arc(enriched.mood)
         engine = BeatTemplateEngine(arc=arc)
         beats = engine.generate_template()
-        yield json.dumps({"step": "generating_descriptions", "beat_count": len(beats)}) + "\n"
+        
+        # Apply constraint mode
+        try:
+            mode = ConstraintMode(request.mode)
+        except ValueError:
+            mode = ConstraintMode.NORMAL
+        beats = apply_constraints(beats, mode)
+        
+        yield json.dumps({"step": "generating_descriptions", "beat_count": len(beats), "mode": mode.value}) + "\n"
 
         try:
             beats = await client.generate_descriptions_only(beats, enriched.expanded)
