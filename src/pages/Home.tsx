@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Sparkles, MessageSquare, LayoutGrid, ListChecks, AlertCircle, ShieldBan } from "lucide-react";
+import { Sparkles, MessageSquare, LayoutGrid, ListChecks, AlertCircle, ShieldBan, Film } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { samplePrompts } from "@/data/demo";
 import { generateScriptment, generateStoryboardFrames, saveProject } from "@/services/api";
@@ -212,6 +212,21 @@ export default function Home() {
               </>
             )}
           </button>
+
+          {/* Explore Genres Button */}
+          {concept.trim().length >= 10 && !isGenerating && (
+            <button
+              onClick={() =>
+                navigate("/explore", {
+                  state: { concept, mode, antiTourism },
+                })
+              }
+              className="w-full mt-2 h-11 bg-[#1A1A1A] hover:bg-[#232323] border border-white/[0.06] hover:border-white/[0.12] text-[#8A8279] hover:text-[#F0EBE3] font-medium rounded-lg flex items-center justify-center gap-2 transition-all duration-150"
+            >
+              <Film className="w-4 h-4" />
+              <span className="text-sm">Explore All Genres</span>
+            </button>
+          )}
         </motion.div>
       </section>
 

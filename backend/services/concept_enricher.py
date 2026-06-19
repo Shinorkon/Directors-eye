@@ -83,6 +83,39 @@ DEFAULT_EXPANSIONS = [
     "every frame is composed with intent and purpose",
 ]
 
+# Location knowledge base — loaded from JSON
+import json
+from pathlib import Path
+
+_LOCATIONS_CACHE = None
+
+def _load_locations() -> dict:
+    """Load location knowledge from JSON file. Cached in memory."""
+    global _LOCATIONS_CACHE
+    if _LOCATIONS_CACHE is not None:
+        return _LOCATIONS_CACHE
+    loc_path = Path(__file__).parent.parent / "data" / "locations.json"
+    if loc_path.exists():
+        with open(loc_path) as f:
+            _LOCATIONS_CACHE = json.load(f)
+    else:
+        _LOCATIONS_CACHE = {}
+    return _LOCATIONS_CACHE
+
+def _get_location_description(concept_text: str, anti_tourism: bool = False) -> str:
+    """Check if the concept mentions a known location, return its description."""
+    locations = _load_locations()
+    text_lower = concept_text.lower()
+
+    for country, country_data in locations.items():
+        for place_name, place_data in country_data.items():
+            keywords = place_data.get("keywords", [place_name])
+            if any(kw in text_lower for kw in keywords):
+                if anti_tourism:
+                    return place_data.get("anti_tourism_description", place_data["description"])
+                return place_data["description"]
+    return ""
+
 
 class EnrichedConcept:
     """Output of concept enrichment — ready for template generation."""
@@ -233,9 +266,15 @@ class ConceptEnricher:
         if mood:
             expanded += f", {mood} mood"
 
-        # Add location if found
+        # Add location if found from keyword detection
         if location and location not in expanded.lower():
             expanded += f", set in a {location}"
+
+        # Inject location knowledge base description (much richer)
+        loc_desc = _get_location_description(concept_text, anti_tourism=anti_tourism)
+        if loc_desc and loc_desc not in expanded:
+            expanded += f". Location: {loc_desc}"
+            defaults_applied.append("location knowledge base injected")
 
         # Step 5: Apply anti-tourism transformations
         if anti_tourism:

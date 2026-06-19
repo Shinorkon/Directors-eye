@@ -6,6 +6,7 @@ import ShootList from "@/pages/ShootList";
 import Archive from "@/pages/Archive";
 import Settings from "@/pages/Settings";
 import Gear from "@/pages/Gear";
+import GenreExplorer from "@/pages/GenreExplorer";
 
 export default function App() {
   return (
@@ -43,6 +44,7 @@ export default function App() {
         <Route path="/archive" element={<Archive />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/gear" element={<Gear />} />
+        <Route path="/explore" element={<GenreExplorer />} />
       </Routes>
     </div>
   );

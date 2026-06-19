@@ -151,3 +151,31 @@ export async function saveGearAPI(profile: any): Promise<any> {
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
+
+// ─── Genre Explorer ──────────────────────────────────────────────
+
+export async function exploreGenres(
+  concept: string,
+  mode?: string,
+  antiTourism?: boolean
+): Promise<{ variants: any[] }> {
+  const res = await fetch(`${API_BASE}/explore/genres`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      concept,
+      mode: mode || "normal",
+      anti_tourism: antiTourism || false,
+    }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+// ─── Locations ───────────────────────────────────────────────────
+
+export async function listLocations(): Promise<any> {
+  const res = await fetch(`${API_BASE}/locations`);
+  if (!res.ok) return {};
+  return res.json();
+}
