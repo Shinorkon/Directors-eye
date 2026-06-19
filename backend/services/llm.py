@@ -2,7 +2,7 @@
 
 import httpx
 import json
-from typing import AsyncGenerator
+from typing import AsyncGenerator, List, Optional
 
 from config import (
     DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL,
@@ -12,6 +12,7 @@ from config import (
 )
 
 from services.prompt_builder import SCRIPTMENT_SYSTEM_PROMPT
+from services.beat_engine import BeatTemplateEngine, GeneratedBeat, EmotionalArc
 
 
 class LLMClient:
@@ -32,9 +33,9 @@ class LLMClient:
         return "none"
 
     async def generate_scriptment(self, concept: str) -> dict:
-        """Generate a structured Scriptment from a user concept."""
+        """Generate a structured Scriptment from a user concept (legacy full-prompt method)."""
         if self.provider == "none":
-            raise RuntimeError("No LLM API key configured. Set DEEPSEEK_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY in backend/.env")
+            raise RuntimeError("No LLM API key configured.")
 
         if self.provider == "deepseek":
             return await self._generate_deepseek(concept)
@@ -46,6 +47,121 @@ class LLMClient:
             return await self._generate_gemini(concept)
         else:
             raise RuntimeError(f"Unknown provider: {self.provider}")
+
+    async def generate_descriptions_only(
+        self,
+        beats: List[GeneratedBeat],
+        concept: str,
+    ) -> List[GeneratedBeat]:
+        """
+        Optimized generation: LLM only fills in descriptions + motivations.
+        Beat structure (acts, shot types, lenses, tones) is pre-defined.
+        """
+        if self.provider == "none":
+            raise RuntimeError("No LLM API key configured.")
+
+        # Build a minimal prompt from the beat engine
+        engine = BeatTemplateEngine()
+        prompt = engine.build_llm_prompt(beats, concept)
+
+        # Send to LLM and parse the descriptions array
+        if self.provider in ("deepseek", "grok", "openai"):
+            descriptions = await self._send_descriptions_prompt(prompt)
+        elif self.provider == "gemini":
+            descriptions = await self._send_descriptions_gemini(prompt)
+        else:
+            raise RuntimeError(f"Unknown provider: {self.provider}")
+
+        # Merge descriptions back into beats
+        desc_by_beat = {d.get("beatNumber"): d for d in descriptions if "beatNumber" in d}
+        for beat in beats:
+            desc = desc_by_beat.get(beat.beat_number, {})
+            if desc.get("description"):
+                beat.description = desc["description"]
+            if desc.get("motivation"):
+                beat.motivation = desc["motivation"]
+
+        return beats
+
+    async def _send_descriptions_prompt(self, prompt: str) -> list:
+        """Send a descriptions-only prompt to DeepSeek/Grok/OpenAI."""
+        if self.provider == "deepseek":
+            api_key, base_url, model = DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, "deepseek-v4-flash"
+        elif self.provider == "grok":
+            api_key, base_url, model = GROK_API_KEY, GROK_BASE_URL, "grok-3"
+        else:
+            api_key, base_url, model = OPENAI_API_KEY, OPENAI_BASE_URL, "gpt-4o-mini"
+
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(
+                f"{base_url}/chat/completions",
+                headers=headers,
+                json={
+                    "model": model,
+                    "messages": [
+                        {"role": "system", "content": "You are a film director writing visual descriptions."},
+                        {"role": "user", "content": prompt},
+                    ],
+                    "temperature": 0.8,
+                    "max_tokens": 3000,
+                    "response_format": {"type": "json_object"},
+                },
+            )
+            response.raise_for_status()
+            data = response.json()
+            content = data["choices"][0]["message"]["content"]
+
+            # Parse — might be {"beats": [...]} or just [...]
+            parsed = json.loads(content)
+            if isinstance(parsed, dict) and "beats" in parsed:
+                return parsed["beats"]
+            if isinstance(parsed, list):
+                return parsed
+            return []
+
+    async def _send_descriptions_gemini(self, prompt: str) -> list:
+        """Send descriptions prompt to Gemini."""
+        url = f"{GEMINI_BASE_URL}/models/gemini-2.5-flash:generateContent"
+
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {
+                "temperature": 0.8,
+                "maxOutputTokens": 3000,
+                "responseMimeType": "application/json",
+            },
+        }
+
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(
+                url,
+                headers={"Content-Type": "application/json"},
+                params={"key": GEMINI_API_KEY},
+                json=payload,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            candidates = data.get("candidates", [])
+            if not candidates:
+                return []
+
+            parts = candidates[0].get("content", {}).get("parts", [])
+            for part in parts:
+                text = part.get("text", "").strip()
+                if text:
+                    text = text.removeprefix("```json").removeprefix("```").removesuffix("```")
+                    parsed = json.loads(text)
+                    if isinstance(parsed, dict) and "beats" in parsed:
+                        return parsed["beats"]
+                    if isinstance(parsed, list):
+                        return parsed
+            return []
 
     async def _generate_deepseek(self, concept: str) -> dict:
         headers = {
