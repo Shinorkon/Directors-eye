@@ -1,0 +1,22 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            cd ${{ secrets.VPS_PATH }}
+            git pull origin main
+            npm run build
+            # Restart backend — adjust to your setup (systemctl / pm2 / supervisorctl)
+            systemctl restart directors-eye 2>/dev/null || pm2 restart directors-eye 2>/dev/null || pkill -f "python main.py" && venv/bin/python main.py &
