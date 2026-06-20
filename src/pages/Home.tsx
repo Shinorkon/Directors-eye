@@ -197,7 +197,7 @@ export default function Home() {
 
           <button
             onClick={handleGenerate}
-            disabled={!concept.trim() || isGenerating}
+            disabled={concept.trim().length < 10 || isGenerating}
             className="w-full mt-4 h-12 bg-[#C8956C] hover:bg-[#D4A67E] text-[#0F0F0F] font-medium rounded-lg flex items-center justify-center gap-2 transition-all duration-150 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-[#C8956C]"
           >
             {isGenerating ? (
