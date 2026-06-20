@@ -15,8 +15,13 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
-            cd ${{ secrets.VPS_PATH }}
+            cd /root/directors-eye
             git pull origin main
             npm run build
-            # Restart backend — adjust to your setup (systemctl / pm2 / supervisorctl)
-            systemctl restart directors-eye 2>/dev/null || pm2 restart directors-eye 2>/dev/null || pkill -f "python main.py" && venv/bin/python main.py &
+            # Sync dist/ to Caddy static root
+            rm -rf /var/www/directors-eye/*
+            cp -r dist/* /var/www/directors-eye/
+            # Kill old workers & restart backend
+            pkill -f "directors-eye/backend/venv/bin/python" 2>/dev/null || true
+            sleep 1
+            cd backend && nohup venv/bin/python main.py > /var/log/directors-eye.log 2>&1 &
