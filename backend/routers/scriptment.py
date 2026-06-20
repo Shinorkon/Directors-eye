@@ -78,10 +78,8 @@ async def generate_scriptment(request: ConceptRequest):
     if validator.needs_llm_retry():
         print(f"[Scriptment] Concept relevance critical — retrying with reinforced prompt")
         try:
-            reinforced = enriched.original
-            # The reinforced prompt via build_llm_prompt already has CRITICAL anchoring;
-            # this second attempt benefits from the same strong prompt
-            beats = await client.generate_descriptions_only(beats, enriched.original, enriched.original)
+            # Use the same expanded concept as the first call, but pass original as anchor
+            beats = await client.generate_descriptions_only(beats, enriched.expanded, enriched.original)
             # Re-validate
             validator2 = FilmGrammarValidator(engine)
             beats, issues2 = validator2.validate_and_fix(beats, original_concept=enriched.original)
