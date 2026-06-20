@@ -88,12 +88,12 @@ async def explore_genres(request: ExploreRequest):
         beats = apply_constraints(beats, mode)
 
         try:
-            beats = await client.generate_descriptions_only(beats, enriched.expanded)
+            beats = await client.generate_descriptions_only(beats, enriched.expanded, enriched.original)
         except Exception as e:
             print(f"[Explore] {arc.value} descriptions failed: {e}")
 
         validator = FilmGrammarValidator(engine)
-        beats, issues = validator.validate_and_fix(beats)
+        beats, issues = validator.validate_and_fix(beats, original_concept=enriched.original)
 
         scriptment = engine.to_scriptment_dict(beats, title=enriched.original)
         meta = ARC_META.get(arc, {})

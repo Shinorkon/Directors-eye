@@ -254,10 +254,11 @@ class ConceptEnricher:
         keyword_words = [kw for kw, _ in keywords]
         subject_expansion = self._expand_subject(concept_text, keyword_words)
 
+        # CRITICAL: always anchor on the original concept text.
+        # Subject expansions add visual colour but must never replace the user's story.
+        expanded = processed_text
         if subject_expansion:
-            expanded = subject_expansion
-        else:
-            expanded = processed_text
+            expanded += f". Visual detail: {subject_expansion}"
 
         # Add time + mood descriptors
         if time_of_day:

@@ -4,8 +4,25 @@ Auto-fixes common violations so the LLM never needs to re-generate.
 Fix-first, retry-second philosophy: 80% of issues are corrected in code.
 """
 
-from typing import List, Tuple
+import re
+from typing import List, Tuple, Optional
 from services.beat_engine import GeneratedBeat, ShotType, LENS_FOR_SHOT, valence_to_tone, BeatTemplateEngine
+
+# Stop words to exclude from concept keyword extraction
+_STOP_WORDS = {
+    "a", "an", "the", "in", "on", "at", "to", "for", "of", "with", "and", "or",
+    "is", "are", "was", "were", "be", "been", "being", "have", "has", "had",
+    "do", "does", "did", "will", "would", "could", "should", "may", "might",
+    "i", "you", "he", "she", "it", "we", "they", "this", "that", "these", "those",
+    "about", "into", "through", "during", "before", "after", "above", "below",
+    "up", "down", "out", "off", "over", "under", "again", "further", "then", "once",
+    "very", "just", "really", "some", "any", "each", "every", "all", "both",
+}
+
+def _extract_concept_keywords(text: str) -> List[str]:
+    """Extract significant words from the concept for relevance checking."""
+    words = re.findall(r'[a-zA-Z]{3,}', text.lower())
+    return [w for w in words if w not in _STOP_WORDS]
 
 ACT_BEAT_RANGES = {
     1: (0.20, 0.35),  # Act I: 20-35% of total beats
@@ -39,15 +56,18 @@ class FilmGrammarValidator:
         self.engine = engine
         self.issues: List[ValidationIssue] = []
 
-    def validate_and_fix(self, beats: List[GeneratedBeat]) -> Tuple[List[GeneratedBeat], List[ValidationIssue]]:
+    def validate_and_fix(self, beats: List[GeneratedBeat], original_concept: str = "") -> Tuple[List[GeneratedBeat], List[ValidationIssue]]:
         """Run all validation passes. Returns (corrected_beats, issues_log)."""
         self.issues = []
+        self.original_concept = original_concept
 
         beats = self._fix_shot_variety(beats)
         beats = self._fix_lens_assignment(beats)
         beats = self._fix_emotional_tone(beats)
         beats = self._check_act_balance(beats)
         beats = self._fix_description_quality(beats)
+        if original_concept:
+            beats = self._check_concept_relevance(beats, original_concept)
 
         return beats, self.issues
 
@@ -132,11 +152,15 @@ class FilmGrammarValidator:
     def _fix_description_quality(self, beats: List[GeneratedBeat]) -> List[GeneratedBeat]:
         """Flag descriptions that are too short, still have template text, or lack detail."""
         beats = list(beats)
+        concept_hint = getattr(self, 'original_concept', '') or ''
         for beat in beats:
             desc = beat.description or ""
             # Check for unfilled template text
             if "[" in desc and "]" in desc:
                 beat.description = (
+                    f"A {beat.shot_type.value.lower()} shot of {concept_hint[:80]}. "
+                    f"The mood is {beat.emotional_tone.lower()}."
+                ) if concept_hint else (
                     f"A {beat.shot_type.value.lower()} shot capturing the scene. "
                     f"The mood is {beat.emotional_tone.lower()}."
                 )
@@ -145,10 +169,13 @@ class FilmGrammarValidator:
                     rule="unfilled_template",
                     severity="auto_fixed",
                     message="Description still contains template placeholder",
-                    fix="Replaced with generic description",
+                    fix="Replaced with concept-aware description",
                 ))
             elif len(desc.strip()) < 20:
                 beat.description = (
+                    f"A {beat.shot_type.value.lower()} frame of {concept_hint[:80]}, "
+                    f"with {beat.emotional_tone.lower()} energy."
+                ) if concept_hint else (
                     f"A {beat.shot_type.value.lower()} frame with {beat.emotional_tone.lower()} energy."
                 )
                 self.issues.append(ValidationIssue(
@@ -156,8 +183,45 @@ class FilmGrammarValidator:
                     rule="short_description",
                     severity="auto_fixed",
                     message=f"Description too short ({len(desc.strip())} chars)",
-                    fix="Expanded with shot-type default",
+                    fix="Expanded with concept-aware default",
                 ))
+        return beats
+
+    def _check_concept_relevance(self, beats: List[GeneratedBeat], concept: str) -> List[GeneratedBeat]:
+        """Check that generated descriptions are semantically related to the original concept.
+        
+        Uses keyword overlap: if <30% of beats contain any concept keyword, flag as critical
+        (requiring LLM retry). If 30-50%, flag as warning.
+        """
+        concept_keywords = _extract_concept_keywords(concept)
+        if not concept_keywords:
+            return beats  # Can't check without keywords
+
+        beats_with_match = 0
+        for beat in beats:
+            desc_lower = (beat.description or "").lower()
+            if any(kw in desc_lower for kw in concept_keywords):
+                beats_with_match += 1
+
+        match_ratio = beats_with_match / max(len(beats), 1)
+        
+        if match_ratio < 0.30:
+            self.issues.append(ValidationIssue(
+                beat_number=-1,
+                rule="concept_relevance",
+                severity="critical",
+                message=f"Only {beats_with_match}/{len(beats)} beats contain concept keywords from: '{concept[:80]}...'. Descriptions appear off-topic.",
+                fix="Retry with reinforced concept-anchored prompt",
+            ))
+        elif match_ratio < 0.50:
+            self.issues.append(ValidationIssue(
+                beat_number=-1,
+                rule="concept_relevance",
+                severity="warning",
+                message=f"Only {beats_with_match}/{len(beats)} beats contain concept keywords. Weak topical alignment.",
+                fix="",
+            ))
+
         return beats
 
     def needs_llm_retry(self) -> bool:

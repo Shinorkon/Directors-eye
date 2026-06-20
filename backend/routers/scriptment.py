@@ -64,7 +64,7 @@ async def generate_scriptment(request: ConceptRequest):
     # Step 4: LLM writes descriptions only (the creative part)
     client = get_llm_client()
     try:
-        beats = await client.generate_descriptions_only(beats, enriched.expanded)
+        beats = await client.generate_descriptions_only(beats, enriched.expanded, enriched.original)
     except Exception as e:
         # If LLM fails, still return the structured scriptment with template descriptions
         # This means generation works even without API keys for structure
@@ -72,7 +72,22 @@ async def generate_scriptment(request: ConceptRequest):
 
     # Step 5: Validate and auto-fix grammar
     validator = FilmGrammarValidator(engine)
-    beats, issues = validator.validate_and_fix(beats)
+    beats, issues = validator.validate_and_fix(beats, original_concept=enriched.original)
+
+    # Step 5b: Retry with reinforced prompt if concept relevance is critically low
+    if validator.needs_llm_retry():
+        print(f"[Scriptment] Concept relevance critical — retrying with reinforced prompt")
+        try:
+            reinforced = enriched.original
+            # The reinforced prompt via build_llm_prompt already has CRITICAL anchoring;
+            # this second attempt benefits from the same strong prompt
+            beats = await client.generate_descriptions_only(beats, enriched.original, enriched.original)
+            # Re-validate
+            validator2 = FilmGrammarValidator(engine)
+            beats, issues2 = validator2.validate_and_fix(beats, original_concept=enriched.original)
+            issues = issues + issues2
+        except Exception as e:
+            print(f"[Scriptment] Retry also failed: {e}")
 
     # Step 6: Assemble final response
     scriptment = engine.to_scriptment_dict(beats, title=enriched.original)
@@ -121,12 +136,12 @@ async def stream_scriptment(request: ConceptRequest):
         yield json.dumps({"step": "generating_descriptions", "beat_count": len(beats), "mode": mode.value}) + "\n"
 
         try:
-            beats = await client.generate_descriptions_only(beats, enriched.expanded)
+            beats = await client.generate_descriptions_only(beats, enriched.expanded, enriched.original)
         except Exception as e:
             yield json.dumps({"step": "warning", "message": str(e)}) + "\n"
 
         validator = FilmGrammarValidator(engine)
-        beats, issues = validator.validate_and_fix(beats)
+        beats, issues = validator.validate_and_fix(beats, original_concept=enriched.original)
         scriptment = engine.to_scriptment_dict(beats, title=enriched.original)
 
         yield json.dumps({"step": "complete", "scriptment": scriptment, "corrections": [i.to_dict() for i in issues]}) + "\n"

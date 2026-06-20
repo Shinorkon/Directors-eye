@@ -1,10 +1,12 @@
 """Mood color grading — applies emotional color LUTs to storyboard frames using Pillow.
 
-No AI needed. Pre-defined curves map emotional tones to color grades.
+Grades are derived dynamically from tone + description analysis, not a fixed lookup.
+Default is NATURAL (identity) — only applies a grade when there's clear signal.
 """
 
 import io
 import base64
+import re
 from typing import Optional
 from services.beat_engine import GeneratedBeat
 
@@ -26,21 +28,6 @@ class ColorGrade(str, Enum):
     DESATURATED = "desaturated"
     HIGH_CONTRAST = "high_contrast"
     NATURAL = "natural"
-
-
-# Emotional tone → color grade mapping
-TONE_TO_GRADE = {
-    "Melancholy": ColorGrade.COOL_BLUE,
-    "Tense": ColorGrade.DESATURATED,
-    "Contemplative": ColorGrade.NATURAL,
-    "Peaceful": ColorGrade.WARM_GOLDEN,
-    "Hopeful": ColorGrade.WARM_GOLDEN,
-    "Joyful": ColorGrade.TEAL_ORANGE,
-    "Transcendent": ColorGrade.HIGH_CONTRAST,
-    "Awe": ColorGrade.TEAL_ORANGE,
-    "Intimate": ColorGrade.WARM_GOLDEN,
-    "Uncertain": ColorGrade.DESATURATED,
-}
 
 
 def _build_luts() -> dict:
@@ -89,6 +76,60 @@ def _build_luts() -> dict:
 
 LUTS = _build_luts()
 
+# ── Dynamic grade selection from tone + description ──────────────
+
+# Time-of-day signals in the description that suggest a specific grade
+TIME_GRADE_HINTS = {
+    "golden": ColorGrade.WARM_GOLDEN,
+    "sunset": ColorGrade.WARM_GOLDEN,
+    "sunrise": ColorGrade.WARM_GOLDEN,
+    "dawn": ColorGrade.WARM_GOLDEN,
+    "dusk": ColorGrade.WARM_GOLDEN,
+    "night": ColorGrade.HIGH_CONTRAST,
+    "midnight": ColorGrade.HIGH_CONTRAST,
+    "noir": ColorGrade.HIGH_CONTRAST,
+    "dark": ColorGrade.HIGH_CONTRAST,
+    "blue hour": ColorGrade.COOL_BLUE,
+    "twilight": ColorGrade.COOL_BLUE,
+    "fog": ColorGrade.DESATURATED,
+    "mist": ColorGrade.DESATURATED,
+    "rain": ColorGrade.DESATURATED,
+    "overcast": ColorGrade.DESATURATED,
+    "grey": ColorGrade.DESATURATED,
+}
+
+# Tone signals that can nudge the grade when time-of-day is ambiguous
+TONE_GRADE_HINTS = {
+    "Melancholy": ColorGrade.COOL_BLUE,
+    "Tense": ColorGrade.HIGH_CONTRAST,
+    "Hopeful": ColorGrade.WARM_GOLDEN,
+    "Joyful": ColorGrade.WARM_GOLDEN,
+    "Transcendent": ColorGrade.HIGH_CONTRAST,
+    "Uncertain": ColorGrade.DESATURATED,
+}
+
+
+def _derive_grade(tone: str, description: str) -> ColorGrade:
+    """Derive a color grade from tone AND description content.
+
+    Description analysis takes priority (time-of-day is a stronger signal).
+    Tone provides a nudge when description is ambiguous.
+    Defaults to NATURAL when no clear signal exists.
+    """
+    d = description.lower()
+
+    # Time-of-day from description (strongest signal)
+    for keyword, grade in TIME_GRADE_HINTS.items():
+        if keyword in d:
+            return grade
+
+    # Tone as fallback (weaker signal)
+    if tone in TONE_GRADE_HINTS:
+        return TONE_GRADE_HINTS[tone]
+
+    # No signal — don't force a grade
+    return ColorGrade.NATURAL
+
 
 class MoodColorGrader:
     """Apply emotional color grading to storyboard images."""
@@ -104,18 +145,20 @@ class MoodColorGrader:
             except (OSError, IOError):
                 self._font = ImageFont.load_default()
 
-    def select_grade(self, tone: str) -> ColorGrade:
-        """Map an emotional tone to its color grade."""
-        return TONE_TO_GRADE.get(tone, ColorGrade.NATURAL)
+    def select_grade(self, tone: str, description: str = "") -> ColorGrade:
+        """Derive a color grade from tone + description content."""
+        return _derive_grade(tone, description)
 
-    def grade_image(self, image_data: bytes, tone: str) -> Optional[bytes]:
+    def grade_image(self, image_data: bytes, tone: str, description: str = "") -> Optional[bytes]:
         """Apply color grading to an image. Returns graded PNG bytes or None if Pillow unavailable."""
         if not self.available:
             return None
 
         try:
             img = Image.open(io.BytesIO(image_data)).convert("RGB")
-            grade = self.select_grade(tone)
+            grade = self.select_grade(tone, description)
+            if grade == ColorGrade.NATURAL:
+                return None  # Identity — skip processing
             r_lut, g_lut, b_lut = LUTS[grade]
 
             r, g, b = img.split()
@@ -131,7 +174,7 @@ class MoodColorGrader:
             print(f"[Grader] Failed: {e}")
             return None
 
-    def grade_base64(self, base64_str: str, tone: str) -> str:
+    def grade_base64(self, base64_str: str, tone: str, description: str = "") -> str:
         """Grade a base64 image and return base64 result."""
         if not self.available:
             return base64_str
@@ -144,7 +187,7 @@ class MoodColorGrader:
                 prefix, data = "", base64_str
 
             image_bytes = base64.b64decode(data)
-            graded_bytes = self.grade_image(image_bytes, tone)
+            graded_bytes = self.grade_image(image_bytes, tone, description)
             if graded_bytes:
                 result = base64.b64encode(graded_bytes).decode()
                 if prefix:

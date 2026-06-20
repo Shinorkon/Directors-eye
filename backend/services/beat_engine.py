@@ -186,13 +186,8 @@ class BeatTemplateEngine:
             self._used_shots.pop(0)
         return selected
 
-    def _get_act_info(self, beat_index: int) -> Tuple[int, str]:
-        """Determine which act a beat belongs to."""
-        acts = {
-            1: (0, 2),
-            2: (2, self.beat_count - 1),
-            3: (self.beat_count - 1, self.beat_count),
-        }
+    def _get_act_info(self, beat_index: int, concept_hint: str = "") -> Tuple[int, str]:
+        """Determine which act a beat belongs to. Uses concept hint for smarter titles."""
         # Recalculate act boundaries based on beat count
         act1_end = max(1, self.beat_count // 3)
         act2_end = max(act1_end + 1, self.beat_count - act1_end)
@@ -203,9 +198,18 @@ class BeatTemplateEngine:
         ]
         for act_num, start, end in act_boundaries:
             if start <= beat_index < end:
-                act_titles = {1: "The Setup", 2: "The Confrontation", 3: "The Resolution"}
-                return act_num, act_titles[act_num]
-        return 1, "The Setup"
+                # Derive smarter act titles from emotional arc shape
+                arc_titles = {
+                    EmotionalArc.RAGS_TO_RICHES: {1: "The Hardship", 2: "The Climb", 3: "The Triumph"},
+                    EmotionalArc.TRAGEDY: {1: "The Good Days", 2: "The Unraveling", 3: "The Fall"},
+                    EmotionalArc.MAN_IN_A_HOLE: {1: "The Fall", 2: "The Abyss", 3: "The Redemption"},
+                    EmotionalArc.ICARUS: {1: "The Ascent", 2: "The Peak", 3: "The Crash"},
+                    EmotionalArc.CINDERELLA: {1: "The Longing", 2: "The Loss", 3: "The Return"},
+                    EmotionalArc.OEDIPUS: {1: "The Fall", 2: "The False Hope", 3: "The Reckoning"},
+                }
+                titles = arc_titles.get(self.arc, {1: "The Setup", 2: "The Confrontation", 3: "The Resolution"})
+                return act_num, titles.get(act_num, f"Act {act_num}")
+        return 1, "The Opening"
 
     def _get_narrative_function(self, beat_index: int) -> str:
         """Get the Save the Cat narrative function for this beat position."""
@@ -226,11 +230,11 @@ class BeatTemplateEngine:
             f"[{beat.shot_type.value} shot with {lens_word.get(beat.recommended_lens, 'cinematic lens')}] "
         )
 
-    def generate_template(self) -> List[GeneratedBeat]:
+    def generate_template(self, concept_hint: str = "") -> List[GeneratedBeat]:
         """Generate the full beat template. Structure only — descriptions from LLM."""
         beats = []
         for i in range(self.beat_count):
-            act_num, act_title = self._get_act_info(i)
+            act_num, act_title = self._get_act_info(i, concept_hint)
             valence = self._interpolate_valence(i)
             tone = valence_to_tone(valence)
             shot_type = self._pick_shot_type(act_num, valence)
@@ -268,7 +272,7 @@ class BeatTemplateEngine:
             "acts": [acts[k] for k in sorted(acts)],
         }
 
-    def build_llm_prompt(self, beats: List[GeneratedBeat], concept: str) -> str:
+    def build_llm_prompt(self, beats: List[GeneratedBeat], concept: str, original_concept: str = "") -> str:
         """Build a minimal prompt: LLM only writes descriptions, no structure rules needed."""
         beats_json = []
         for b in beats:
@@ -276,41 +280,51 @@ class BeatTemplateEngine:
                 "beatNumber": b.beat_number,
                 "actNumber": b.act_number,
                 "actTitle": b.act_title,
+                "narrativeFunction": b.narrative_function,
                 "shotType": b.shot_type.value,
                 "emotionalTone": b.emotional_tone,
                 "recommendedLens": b.recommended_lens,
             })
 
+        primary = original_concept or concept
+
         import json
         return f"""You are a film director writing visual descriptions for a scriptment.
 
-**User's concept:** {concept}
+**User's original concept (YOUR PRIMARY ANCHOR):** {primary}
+{"**Enrichment context (time/mood/location hints only — do NOT let these override the original concept):** " + concept if concept != primary else ""}
 
 Below is the pre-planned structure. For each beat, write:
 1. "description": One vivid sentence describing what the audience sees.
 2. "motivation": One sentence explaining why this shot matters emotionally.
 
-Respond ONLY with a JSON array matching this structure:
-[
-  {{
-    "beatNumber": 1,
-    "description": "One vivid visual sentence...",
-    "motivation": "One sentence of emotional/story intent..."
-  }},
-  ...
-]
+Respond ONLY with a JSON object in this exact structure:
+{{
+  "beats": [
+    {{
+      "beatNumber": 1,
+      "description": "One vivid visual sentence...",
+      "motivation": "One sentence of emotional/story intent..."
+    }},
+    ...
+  ]
+}}
 
 BEATS TO FILL:
 {json.dumps(beats_json, indent=2)}
 
 RULES:
+- CRITICAL: EVERY description MUST explicitly depict the user's ORIGINAL concept: "{primary}". Do NOT write generic cinematic scenes, industrial landscapes, harbors, construction sites, or unrelated subjects. Each beat must be about: {primary}
+- The enrichment context (time of day, mood, location) is supplementary — the original concept is your anchor
 - Descriptions must be VISUAL — what the camera sees, not what characters think
 - Each description should be 1 sentence, ~15-25 words
 - Motivations should reference cinematic storytelling principles
-- The emotional tone and shot type are already set — write descriptions that match them
+- The emotional tone, shot type, and narrative function are already set — write descriptions that match them
+- The narrative function tells you what story purpose each beat serves (e.g., "opening_image" introduces the world, "midpoint" is the turning point)
 - Total runtime should feel like 30-90 seconds across all beats
+- If the concept is simple b-roll (no protagonist or plot), focus purely on visual variety of the subject matter rather than inventing a narrative
 
-Respond ONLY with the JSON array. No markdown, no code blocks, no explanations."""
+Respond ONLY with the JSON object. No markdown, no code blocks, no explanations."""
 
 
 def get_beat_engine(arc: Optional[EmotionalArc] = None) -> BeatTemplateEngine:

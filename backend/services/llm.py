@@ -52,6 +52,7 @@ class LLMClient:
         self,
         beats: List[GeneratedBeat],
         concept: str,
+        original_concept: str = "",
     ) -> List[GeneratedBeat]:
         """
         Optimized generation: LLM only fills in descriptions + motivations.
@@ -62,7 +63,7 @@ class LLMClient:
 
         # Build a minimal prompt from the beat engine
         engine = BeatTemplateEngine()
-        prompt = engine.build_llm_prompt(beats, concept)
+        prompt = engine.build_llm_prompt(beats, concept, original_concept)
 
         # Send to LLM and parse the descriptions array
         if self.provider in ("deepseek", "grok", "openai"):
@@ -104,10 +105,10 @@ class LLMClient:
                 json={
                     "model": model,
                     "messages": [
-                        {"role": "system", "content": "You are a film director writing visual descriptions."},
+                        {"role": "system", "content": "You are a film director writing visual descriptions. You MUST stay tightly focused on the user's specific concept. Every description must clearly depict the exact subject, action, and environment the user described. Never write generic, unrelated, or default cinematic content like harbors, construction sites, industrial machinery, or landscapes unless they are explicitly part of the user's concept."},
                         {"role": "user", "content": prompt},
                     ],
-                    "temperature": 0.8,
+                    "temperature": 0.55,
                     "max_tokens": 3000,
                     "response_format": {"type": "json_object"},
                 },
@@ -129,9 +130,12 @@ class LLMClient:
         url = f"{GEMINI_BASE_URL}/models/gemini-2.5-flash:generateContent"
 
         payload = {
+            "systemInstruction": {
+                "parts": [{"text": "You are a film director writing visual descriptions. You MUST stay tightly focused on the user's specific concept. Every description must clearly depict the exact subject, action, and environment the user described. Never write generic, unrelated, or default cinematic content like harbors, construction sites, industrial machinery, or landscapes unless they are explicitly part of the user's concept."}]
+            },
             "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {
-                "temperature": 0.8,
+                "temperature": 0.55,
                 "maxOutputTokens": 3000,
                 "responseMimeType": "application/json",
             },

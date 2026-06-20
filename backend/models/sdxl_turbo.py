@@ -1,4 +1,11 @@
-"""External API image generation for storyboard frames (Gemini / Pollinations fallback)."""
+"""External API image generation for storyboard frames (Gemini / Pollinations fallback).
+
+The prompt builder is intentionally minimal: the LLM-written description (anchored
+to the user's original concept) carries ALL the creative/aesthetic signal — time of
+day, setting, mood, palette.  Hardcoded aesthetic tables are deliberately absent to
+avoid overriding the concept's unique visual identity.  Only technical framing and
+lens characteristics are supplied structurally.
+"""
 
 import io
 import base64
@@ -16,39 +23,47 @@ class StoryboardGenerator:
             cls._instance = super().__new__(cls)
         return cls._instance
 
-    @staticmethod
-    def _build_prompt(description: str, shot_type: str, emotional_tone: str, lens: str) -> str:
-        """Build an optimized image generation prompt from beat data."""
+    # ── Technical / structural constants (not aesthetic opinions) ───
 
-        framing = {
-            "Establishing": "ultra wide establishing shot, vast environment, tiny subject in massive space, epic scale",
-            "Wide": "wide shot, full body, environmental context, rule of thirds",
-            "Medium": "medium shot, waist up, intimate framing, shallow depth of field",
-            "Close-up": "close-up portrait, emotional intensity, sharp eyes, soft bokeh background",
-            "ECU": "extreme close-up, detail texture, macro feel, abstract composition",
-            "POV": "first person point of view, immersive perspective, through-the-lens feel",
-            "Aerial": "aerial drone shot, top-down perspective, vast landscape patterns",
-        }
+    # Shot-type → framing description (cinematographic fact, not taste)
+    FRAMING = {
+        "Establishing": "ultra wide establishing shot, vast environment, tiny subject in massive space, epic scale",
+        "Wide": "wide shot, full body, environmental context, rule of thirds",
+        "Medium": "medium shot, waist up, intimate framing, shallow depth of field",
+        "Close-up": "close-up portrait, emotional intensity, sharp eyes, soft bokeh background",
+        "ECU": "extreme close-up, detail texture, macro feel, abstract composition",
+        "POV": "first person point of view, immersive perspective, through-the-lens feel",
+        "Aerial": "aerial drone shot, top-down perspective, vast landscape patterns",
+    }
 
-        lens_character = {
-            "33mm": "natural perspective, environmental storytelling, slight wide distortion",
-            "55mm": "portrait compression, creamy bokeh, professional cinema lens quality",
-            "Find X9": "ultra wide smartphone perspective, modern documentary feel",
-        }
+    # Lens → optical characteristic (physical fact, not taste)
+    LENS_CHARACTER = {
+        "33mm": "natural perspective, environmental storytelling, slight wide distortion",
+        "55mm": "portrait compression, creamy bokeh, professional cinema lens quality",
+        "Find X9": "ultra wide smartphone perspective, modern documentary feel",
+    }
 
-        base_framing = framing.get(shot_type, "cinematic shot")
-        base_lens = lens_character.get(lens, "cinematic lens")
+    @classmethod
+    def _build_prompt(cls, description: str, shot_type: str, emotional_tone: str, lens: str) -> str:
+        """Build a storyboard image prompt that lets the DESCRIPTION lead.
 
+        No hardcoded colour palettes, lighting recipes, or setting textures.
+        The LLM-generated description — now anchored to the user's original
+        concept — already encodes time-of-day, setting, mood, and atmosphere.
+        We supply only technical framing and lens facts.
+        """
+        base_framing = cls.FRAMING.get(shot_type, "cinematic shot")
+        base_lens = cls.LENS_CHARACTER.get(lens, "cinematic lens")
+
+        # The description leads; metadata only reinforces structure
         prompt = (
-            f"cinematic storyboard frame, film still, {base_framing}, "
+            f"cinematic storyboard frame, film still, "
+            f"{base_framing}, "
             f"{base_lens}, "
             f"{emotional_tone.lower()} mood, "
-            f"{description}, "
-            f"warm amber and deep teal tones, 2.39:1 anamorphic widescreen, "
-            f"35mm film grain, professional cinematography, "
-            f"soft volumetric lighting, detailed composition, "
-            f"natural skin tones, photorealistic, high detail, "
-            f"Roger Deakins cinematography style, "
+            f"scene: {description}, "
+            f"35mm film grain, photorealistic, high detail, "
+            f"natural skin tones, "
             f"no text, no watermark, no UI elements"
         )
 
