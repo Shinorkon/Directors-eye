@@ -7,6 +7,7 @@ import Archive from "@/pages/Archive";
 import Settings from "@/pages/Settings";
 import Gear from "@/pages/Gear";
 import GenreExplorer from "@/pages/GenreExplorer";
+import Scout from "@/pages/Scout";
 
 export default function App() {
   return (
@@ -45,6 +46,7 @@ export default function App() {
         <Route path="/settings" element={<Settings />} />
         <Route path="/gear" element={<Gear />} />
         <Route path="/explore" element={<GenreExplorer />} />
+        <Route path="/scout" element={<Scout />} />
       </Routes>
     </div>
   );

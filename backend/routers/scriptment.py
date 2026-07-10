@@ -19,7 +19,8 @@ router = APIRouter(prefix="/api/scriptment", tags=["Scriptment"])
 
 
 class ConceptRequest(BaseModel):
-    concept: str
+    concept: str = ""  # Now optional if image_base64 is provided
+    image_base64: str = ""  # Optional: scene photo for reverse visual framing
     stream: bool = False
     emotional_arc: str = ""  # Optional: override auto-detection
     mode: str = "normal"  # normal, solo_crew, minimal, guerrilla, studio
@@ -34,12 +35,59 @@ class ScriptmentResponse(BaseModel):
 @router.post("/generate", response_model=ScriptmentResponse)
 async def generate_scriptment(request: ConceptRequest):
     """Generate a Scriptment using the optimized code-first pipeline."""
-    if not request.concept or len(request.concept.strip()) < 10:
-        raise HTTPException(status_code=400, detail="Concept must be at least 10 characters")
+    concept = request.concept
+    image_b64 = request.image_base64
+    image_analysis = None
+
+    # Strip data URI prefix from image if present
+    if image_b64 and "," in image_b64 and image_b64.startswith("data:"):
+        image_b64 = image_b64.split(",", 1)[1]
+
+    # ── Image-to-concept: analyze photo and merge with text ──────────
+    if image_b64:
+        from services.image_analyzer import get_image_analyzer
+        try:
+            analyzer = get_image_analyzer()
+            image_analysis = await analyzer.analyze_b64(image_b64, "scriptment_concept")
+            print(f"[Scriptment] Image analyzed: {image_analysis.mood}, {image_analysis.location_type}")
+        except Exception as e:
+            print(f"[Scriptment] Image analysis failed (proceeding with text only): {e}")
+            image_analysis = None
+
+        # Merge: image description + user concept
+        if image_analysis:
+            scene = image_analysis.scene_description
+            if concept.strip():
+                # Both image and text provided — reference mood boarding
+                concept = (
+                    f"A film set in this location: {scene}. "
+                    f"Creative direction from the filmmaker: {concept}"
+                )
+            else:
+                # Photo only — the scene description IS the concept
+                concept = f"A short film set in this location: {scene}"
+
+    # Validate we have a concept
+    if not concept or len(concept.strip()) < 10:
+        raise HTTPException(status_code=400, detail="Concept must be at least 10 characters — provide text, an image, or both")
 
     # Step 1: Enrich concept — extract keywords, infer time/mood
     enricher = get_enricher()
-    enriched = enricher.enrich(request.concept, anti_tourism=request.anti_tourism)
+    enriched = enricher.enrich(concept, anti_tourism=request.anti_tourism)
+
+    # If we have image analysis, inject its visual metadata into enrichment
+    if image_analysis:
+        # Override inferred categories with real visual data
+        enriched.time_of_day = enriched.time_of_day or image_analysis.time_of_day
+        enriched.mood = enriched.mood or image_analysis.mood
+        enriched.location = enriched.location or image_analysis.location_type
+        # Append visual keywords to expanded concept
+        visual_context = (
+            f" Colors: {', '.join(image_analysis.dominant_colors[:3])}."
+            f" Textures: {', '.join(image_analysis.props_textures[:4])}."
+            f" Lighting: {image_analysis.lighting_conditions}."
+        )
+        enriched.expanded = enriched.expanded + visual_context
 
     # Step 2: Select emotional arc — use requested or infer from mood
     if request.emotional_arc:
@@ -114,10 +162,29 @@ async def stream_scriptment(request: ConceptRequest):
     client = get_llm_client()
 
     async def token_stream():
-        yield json.dumps({"step": "enriching", "mode": request.mode, "anti_tourism": request.anti_tourism}) + "\n"
+        # ── Image processing (same as /generate) ──────────────────
+        concept = request.concept
+        image_b64 = request.image_base64
+        if image_b64 and "," in image_b64 and image_b64.startswith("data:"):
+            image_b64 = image_b64.split(",", 1)[1]
+
+        if image_b64:
+            from services.image_analyzer import get_image_analyzer
+            try:
+                analyzer = get_image_analyzer()
+                image_analysis = await analyzer.analyze_b64(image_b64, "scriptment_concept")
+                scene = image_analysis.scene_description
+                if concept.strip():
+                    concept = f"A film set in this location: {scene}. Creative direction: {concept}"
+                else:
+                    concept = f"A short film set in this location: {scene}"
+            except Exception as e:
+                print(f"[Scriptment Stream] Image analysis failed: {e}")
+
+        yield json.dumps({"step": "enriching", "mode": request.mode, "anti_tourism": request.anti_tourism, "has_image": bool(image_b64)}) + "\n"
 
         enricher = get_enricher()
-        enriched = enricher.enrich(request.concept, anti_tourism=request.anti_tourism)
+        enriched = enricher.enrich(concept, anti_tourism=request.anti_tourism)
         yield json.dumps({"step": "structuring", "concept": enriched.to_dict()}) + "\n"
 
         arc = _infer_arc(enriched.mood)

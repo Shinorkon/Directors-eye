@@ -5,13 +5,15 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api";
 export async function generateScriptment(
   concept: string,
   mode?: string,
-  antiTourism?: boolean
+  antiTourism?: boolean,
+  imageBase64?: string,
 ): Promise<Scriptment> {
   const res = await fetch(`${API_BASE}/scriptment/generate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       concept,
+      image_base64: imageBase64 || "",
       mode: mode || "normal",
       anti_tourism: antiTourism || false,
     }),
@@ -177,5 +179,47 @@ export async function exploreGenres(
 export async function listLocations(): Promise<any> {
   const res = await fetch(`${API_BASE}/locations`);
   if (!res.ok) return {};
+  return res.json();
+}
+
+// ─── Photo Scout ─────────────────────────────────────────────────
+
+export async function analyzeLocationPhoto(
+  imageBase64: string,
+  country?: string,
+  placeName?: string,
+  gpsPrivacy?: boolean,
+): Promise<any> {
+  const res = await fetch(`${API_BASE}/scout/analyze`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      image_base64: imageBase64,
+      country: country || "",
+      place_name: placeName || "",
+      gps_privacy: gpsPrivacy ?? true,
+    }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function saveScoutLocation(payload: any): Promise<any> {
+  const res = await fetch(`${API_BASE}/scout/save`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function compositeAnalyzePhotos(images: string[]): Promise<any> {
+  const res = await fetch(`${API_BASE}/scout/composite`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ images }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }

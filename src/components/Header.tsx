@@ -1,4 +1,4 @@
-import { Film, Sliders, Camera, Aperture } from "lucide-react";
+import { Film, Sliders, Camera, Aperture, MapPin } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { useState, useEffect } from "react";
 
@@ -14,6 +14,7 @@ export default function Header() {
 
   const navItems = [
     { path: "/", icon: Aperture, label: "Create" },
+    { path: "/scout", icon: MapPin, label: "Scout" },
     { path: "/archive", icon: Film, label: "Projects" },
     { path: "/settings", icon: Sliders, label: "Settings" },
     { path: "/gear", icon: Camera, label: "Gear" },

@@ -66,4 +66,60 @@ export type ShotType =
 
 export type LensType = "33mm" | "55mm" | "Find X9";
 
-export type PageRoute = "/" | "/scriptment" | "/shoot-list" | "/archive" | "/settings" | "/gear";
+export type PageRoute = "/" | "/scriptment" | "/shoot-list" | "/archive" | "/settings" | "/gear" | "/scout";
+
+// ─── Image Upload & Analysis ─────────────────────────────────────
+
+export interface ExifInfo {
+  camera_model: string;
+  captured_at: string;
+  gps_lat: number | null;
+  gps_lng: number | null;
+  orientation: number;
+  iso: number | null;
+  aperture: string;
+  shutter_speed: string;
+  focal_length: string;
+}
+
+export interface ScoutAnalysis {
+  scene_description: string;
+  lighting_conditions: string;
+  dominant_colors: string[];
+  mood: string;
+  time_of_day: string;
+  location_type: string;
+  props_textures: string[];
+  suggested_shot_types: string[];
+  technical_notes: string;
+  exif: ExifInfo;
+  // Proposed location data
+  proposed_keywords: string[];
+  proposed_description: string;
+  proposed_vibe: string;
+  proposed_best_times: string[];
+  proposed_textures: string[];
+  proposed_anti_tourism_description: string;
+  // GPS
+  gps_lat: number | null;
+  gps_lng: number | null;
+  suggested_country: string;
+  suggested_place_name: string;
+}
+
+export interface ScoutSavePayload {
+  image_base64: string;
+  country: string;
+  place_name: string;
+  description: string;
+  keywords: string[];
+  vibe: string;
+  best_times: string[];
+  textures: string[];
+  anti_tourism_description: string;
+  gps_lat: number | null;
+  gps_lng: number | null;
+  captured_at: string;
+}
+
+export type InputTab = "write" | "photo" | "both";

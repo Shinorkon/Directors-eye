@@ -1,9 +1,12 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Sparkles, MessageSquare, LayoutGrid, ListChecks, AlertCircle, ShieldBan, Film } from "lucide-react";
+import { Sparkles, AlertCircle, ShieldBan, Film, PenLine, Camera, ImagePlus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { samplePrompts } from "@/data/demo";
 import { generateScriptment, generateStoryboardFrames, saveProject } from "@/services/api";
+import { cn } from "@/lib/utils";
+import ImageUpload from "@/components/ImageUpload";
+import type { InputTab } from "@/types";
 
 const MODES = [
   { id: "normal", label: "Normal", icon: "🎬", desc: "Full creative freedom" },
@@ -13,22 +16,50 @@ const MODES = [
   { id: "studio", label: "Studio", icon: "💡", desc: "Controlled interior, tripod" },
 ];
 
+const INPUT_TABS: { id: InputTab; label: string; icon: React.ReactNode }[] = [
+  { id: "write", label: "Write", icon: <PenLine size={14} /> },
+  { id: "photo", label: "Photo", icon: <Camera size={14} /> },
+  { id: "both", label: "Both", icon: <ImagePlus size={14} /> },
+];
+
 export default function Home() {
   const [concept, setConcept] = useState("");
+  const [inputTab, setInputTab] = useState<InputTab>("write");
+  const [imageBase64, setImageBase64] = useState("");
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState("normal");
   const [antiTourism, setAntiTourism] = useState(false);
   const navigate = useNavigate();
 
+  const hasInput = 
+    (inputTab === "write" && concept.trim().length >= 10) ||
+    (inputTab === "photo" && imageBase64 !== "") ||
+    (inputTab === "both" && concept.trim().length >= 10 && imageBase64 !== "");
+
+  const handleImageReady = (b64: string, previewUrl: string) => {
+    setImageBase64(b64);
+    setImagePreview(previewUrl);
+  };
+
+  const handleImageClear = () => {
+    setImageBase64("");
+    setImagePreview(null);
+  };
+
   const handleGenerate = async () => {
-    if (!concept.trim()) return;
+    if (!hasInput) return;
     setIsGenerating(true);
     setError(null);
 
     try {
-      // 1. Generate Scriptment with mode & anti-tourism options
-      const scriptment = await generateScriptment(concept, mode, antiTourism);
+      // Build merged concept for LLM
+      const promptConcept = inputTab === "photo" ? "A short film, see attached photo for setting and mood" : concept;
+      const finalImageB64 = inputTab !== "write" ? imageBase64 : "";
+
+      // 1. Generate Scriptment with mode, anti-tourism & optional image
+      const scriptment = await generateScriptment(promptConcept, mode, antiTourism, finalImageB64);
 
       // 2. Generate storyboard frames via external image API
       const allBeats = scriptment.acts.flatMap((a: any) => a.beats);
@@ -51,7 +82,8 @@ export default function Home() {
       });
 
       // 4. Auto-save to VPS (fire-and-forget)
-      saveProject({ scriptment, hero_frame: frames[0] ? `data:image/png;base64,${frames[0]}` : "" })
+      const heroFrame = frames[0] ? `data:image/png;base64,${frames[0]}` : "";
+      saveProject({ scriptment, hero_frame: heroFrame })
         .then(() => console.log("[Save] Project saved to VPS"))
         .catch((err) => console.warn("[Save] Failed to save project:", err));
 
@@ -67,6 +99,7 @@ export default function Home() {
 
   const handleQuickPrompt = (prompt: string) => {
     setConcept(prompt);
+    setInputTab("write");
   };
 
   return (
@@ -98,8 +131,8 @@ export default function Home() {
             transition={{ duration: 0.5, delay: 0.2 }}
             className="text-base text-[#8A8279] leading-relaxed max-w-[480px] mx-auto"
           >
-            Describe your cinematic idea. Director&apos;s Eye will plan the shots, compose the
-            frames, and build your shoot list — calibrated for your gear.
+            Describe your idea — or snap a photo of a location. Director&apos;s Eye will plan the
+            shots, compose the frames, and build your shoot list.
           </motion.p>
         </div>
       </section>
@@ -124,20 +157,82 @@ export default function Home() {
             </motion.div>
           )}
 
-          <div className="relative">
-            <textarea
-              value={concept}
-              onChange={(e) => setConcept(e.target.value)}
-              placeholder="A 60-second film about solitude at dawn. A fisherman prepares his boat as the first light hits the water. He looks up — a brief moment of peace before the day begins..."
-              disabled={isGenerating}
-              className="w-full min-h-[140px] bg-[#1A1A1A] border border-white/[0.06] rounded-xl p-4 text-sm text-[#F0EBE3] placeholder:text-[#5A544D] resize-none focus:outline-none focus:border-[#C8956C] transition-colors duration-150 disabled:opacity-50 scrollbar-thin"
-            />
-            <div className="flex items-center justify-between mt-2 px-1">
-              <span className="font-mono-tech text-[10px] text-[#5A544D]">
-                {concept.length > 0 && `${concept.length} chars`}
-              </span>
-            </div>
+          {/* ── Input Tabs ─────────────────────────────────── */}
+          <div className="flex gap-1 mb-4 bg-[#1A1A1A] border border-white/[0.06] rounded-lg p-1">
+            {INPUT_TABS.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setInputTab(tab.id)}
+                disabled={isGenerating}
+                className={cn(
+                  "flex-1 flex items-center justify-center gap-1.5 py-2 rounded-md text-xs font-medium transition-all duration-200",
+                  inputTab === tab.id
+                    ? "bg-[#C8956C]/20 text-[#C8956C] shadow-inner"
+                    : "text-[#5A544D] hover:text-[#8A8279]"
+                )}
+              >
+                {tab.icon}
+                {tab.label}
+              </button>
+            ))}
           </div>
+
+          {/* ── Write Tab ──────────────────────────────────── */}
+          {inputTab === "write" && (
+            <div className="relative">
+              <textarea
+                value={concept}
+                onChange={(e) => setConcept(e.target.value)}
+                placeholder="A 60-second film about solitude at dawn. A fisherman prepares his boat as the first light hits the water..."
+                disabled={isGenerating}
+                className="w-full min-h-[140px] bg-[#1A1A1A] border border-white/[0.06] rounded-xl p-4 text-sm text-[#F0EBE3] placeholder:text-[#5A544D] resize-none focus:outline-none focus:border-[#C8956C] transition-colors duration-150 disabled:opacity-50 scrollbar-thin"
+              />
+              <div className="flex items-center justify-between mt-2 px-1">
+                <span className="font-mono-tech text-[10px] text-[#5A544D]">
+                  {concept.length > 0 && `${concept.length} chars`}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* ── Photo Tab ──────────────────────────────────── */}
+          {inputTab === "photo" && (
+            <div className="space-y-4">
+              <ImageUpload
+                onImage={handleImageReady}
+                onClear={handleImageClear}
+                preview={imagePreview}
+                label="Snap or upload a location photo — AI will reverse-engineer a scene"
+              />
+              <textarea
+                value={concept}
+                onChange={(e) => setConcept(e.target.value)}
+                placeholder="Optional: add specific creative direction to guide the generated scene..."
+                disabled={isGenerating}
+                className="w-full min-h-[72px] bg-[#1A1A1A] border border-white/[0.06] rounded-xl p-3 text-sm text-[#F0EBE3] placeholder:text-[#5A544D] resize-none focus:outline-none focus:border-[#C8956C] transition-colors duration-150 disabled:opacity-50"
+              />
+            </div>
+          )}
+
+          {/* ── Both Tab ───────────────────────────────────── */}
+          {inputTab === "both" && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <ImageUpload
+                onImage={handleImageReady}
+                onClear={handleImageClear}
+                preview={imagePreview}
+                compact
+                label="Drop location photo"
+              />
+              <textarea
+                value={concept}
+                onChange={(e) => setConcept(e.target.value)}
+                placeholder="Describe your cinematic idea — the photo sets the visual mood..."
+                disabled={isGenerating}
+                className="w-full min-h-[140px] bg-[#1A1A1A] border border-white/[0.06] rounded-xl p-4 text-sm text-[#F0EBE3] placeholder:text-[#5A544D] resize-none focus:outline-none focus:border-[#C8956C] transition-colors duration-150 disabled:opacity-50"
+              />
+            </div>
+          )}
 
           {/* Mode Selector */}
           <div className="mt-4">
@@ -197,7 +292,7 @@ export default function Home() {
 
           <button
             onClick={handleGenerate}
-            disabled={concept.trim().length < 10 || isGenerating}
+            disabled={!hasInput || isGenerating}
             className="w-full mt-4 h-12 bg-[#C8956C] hover:bg-[#D4A67E] text-[#0F0F0F] font-medium rounded-lg flex items-center justify-center gap-2 transition-all duration-150 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-[#C8956C]"
           >
             {isGenerating ? (
@@ -214,7 +309,7 @@ export default function Home() {
           </button>
 
           {/* Explore Genres Button */}
-          {concept.trim().length >= 10 && !isGenerating && (
+          {hasInput && !isGenerating && (
             <button
               onClick={() =>
                 navigate("/explore", {
