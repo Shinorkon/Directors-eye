@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from "react";
-import { Upload, Camera, X, Zap } from "lucide-react";
+import { Camera, X, Zap, ImageIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ImageUploadProps {
@@ -59,6 +59,7 @@ export default function ImageUpload({
   const [isDragOver, setIsDragOver] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const cameraInput = useRef<HTMLInputElement>(null);
 
   const processFile = useCallback(
     async (file: File) => {
@@ -136,9 +137,8 @@ export default function ImageUpload({
       }}
       onDragLeave={() => setIsDragOver(false)}
       onDrop={handleDrop}
-      onClick={() => fileInput.current?.click()}
       className={cn(
-        "relative flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed cursor-pointer transition-all duration-300",
+        "relative flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed cursor-default transition-all duration-300",
         compact ? "h-32 px-4" : "h-48 sm:h-56 px-6",
         isDragOver
           ? "border-amber-400 bg-amber-400/10 scale-[1.02]"
@@ -146,11 +146,20 @@ export default function ImageUpload({
         isProcessing && "opacity-50 pointer-events-none"
       )}
     >
+      {/* Hidden: camera capture */}
+      <input
+        ref={cameraInput}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        onChange={handleFileChange}
+        className="hidden"
+      />
+      {/* Hidden: gallery / file picker */}
       <input
         ref={fileInput}
         type="file"
         accept="image/*"
-        capture="environment"
         onChange={handleFileChange}
         className="hidden"
       />
@@ -162,23 +171,47 @@ export default function ImageUpload({
         </div>
       ) : (
         <>
-          {/* Icon */}
-          <div
-            className={cn(
-              "flex items-center gap-2 p-3 rounded-full bg-amber-400/10 text-amber-400 transition-all",
-              isDragOver && "bg-amber-400/20 scale-110"
-            )}
-          >
-            <Camera size={compact ? 18 : 22} />
-            <Upload size={compact ? 14 : 16} />
+          {/* Action buttons */}
+          <div className="flex items-center gap-4">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                cameraInput.current?.click();
+              }}
+              className={cn(
+                "flex flex-col items-center gap-1.5 p-3 rounded-xl transition-all duration-200",
+                "hover:bg-amber-400/10 hover:text-amber-400 text-white/40"
+              )}
+              title="Take a photo"
+            >
+              <Camera size={compact ? 20 : 24} />
+              <span className="text-[10px] font-medium tracking-wide uppercase">Capture</span>
+            </button>
+
+            <span className="text-white/15 text-xs font-light">or</span>
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                fileInput.current?.click();
+              }}
+              className={cn(
+                "flex flex-col items-center gap-1.5 p-3 rounded-xl transition-all duration-200",
+                "hover:bg-amber-400/10 hover:text-amber-400 text-white/40"
+              )}
+              title="Choose from gallery"
+            >
+              <ImageIcon size={compact ? 20 : 24} />
+              <span className="text-[10px] font-medium tracking-wide uppercase">Attach</span>
+            </button>
           </div>
 
-          {/* Label */}
-          <p className="text-sm font-medium text-white/50 text-center leading-tight">
-            {label}
-          </p>
+          {/* Drag hint */}
+          <p className="text-xs text-white/30">{label}</p>
 
-          {/* Hint pill */}
+          {/* AI pill */}
           <span className="flex items-center gap-1.5 text-[10px] text-white/30 bg-white/5 rounded-full px-3 py-1">
             <Zap size={10} />
             Analyzed by AI
