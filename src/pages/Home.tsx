@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Sparkles, AlertCircle, ShieldBan, Film, PenLine, Camera, ImagePlus } from "lucide-react";
+import { Sparkles, AlertCircle, ShieldBan, Film, PenLine, Camera, ImagePlus, MessageSquare, LayoutGrid, ListChecks } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { samplePrompts } from "@/data/demo";
 import { generateScriptment, generateStoryboardFrames, saveProject } from "@/services/api";

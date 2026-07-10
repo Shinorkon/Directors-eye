@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  MapPin, Save, Compass, Sun, Moon, Cloud, Eye,
-  Palette, Texture, Zap, Sparkles, CheckCircle2,
-  Clock, ShieldBan, Camera, Landmark, ChevronRight,
+  Save, Compass, Sun, Moon, Cloud, Eye,
+  Palette, Waves, Zap, CheckCircle2,
+  Clock, ShieldBan, Landmark,
   Tag, Calendar, AlertCircle
 } from "lucide-react";
 import { analyzeLocationPhoto, saveScoutLocation } from "@/services/api";
@@ -327,7 +327,7 @@ export default function Scout() {
                 {/* Textures */}
                 <div>
                   <div className="flex items-center gap-1.5 mb-2 text-[#5A544D]">
-                    <Texture size={12} />
+                    <Waves size={12} />
                     <span className="text-[10px] uppercase tracking-wider font-mono-tech">Textures</span>
                   </div>
                   <div className="flex flex-wrap gap-2">

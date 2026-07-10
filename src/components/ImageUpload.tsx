@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from "react";
-import { Upload, Camera, X, Image as ImageIcon, Zap } from "lucide-react";
+import { Upload, Camera, X, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ImageUploadProps {
