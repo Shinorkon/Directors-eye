@@ -102,6 +102,44 @@
         border-radius: var(--radius);
         border: 1px solid var(--border);
       }
+      #zonePanel {
+        display: none;
+        margin-bottom: 16px;
+      }
+      #zoneBar {
+        display: flex;
+        height: 16px;
+        border-radius: var(--radius);
+        overflow: hidden;
+        border: 1px solid var(--border);
+      }
+      #zoneBar .seg {
+        height: 100%;
+      }
+      #zoneBar .seg-shadow {
+        background: #3a4a63;
+      }
+      #zoneBar .seg-mid {
+        background: #6b8ab5;
+      }
+      #zoneBar .seg-highlight {
+        background: #cfe0f0;
+      }
+      #zoneLegend {
+        display: flex;
+        justify-content: space-between;
+        font-size: 10.5px;
+        color: var(--text-dim);
+        margin-top: 5px;
+      }
+      #zoneWarnings {
+        font-size: 11px;
+        color: #e2a97e;
+        margin-top: 6px;
+      }
+      #zoneWarnings:empty {
+        display: none;
+      }
       #verdict {
         padding: 10px 12px;
         border-radius: var(--radius);
@@ -137,9 +175,24 @@
         border: 1px solid var(--border);
         border-radius: var(--radius);
       }
+      .step-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 8px;
+      }
       .step-tool {
         font-weight: 600;
         color: var(--text);
+      }
+      .step-current {
+        font-size: 10.5px;
+        color: var(--text-dim);
+        white-space: nowrap;
+      }
+      .step-direction {
+        color: var(--accent-hover);
+        margin-top: 2px;
       }
       .step-reason {
         color: var(--text-dim);
@@ -190,6 +243,21 @@
     <section>
       <button id="btnCheckGrade">Check my grade</button>
     </section>
+
+    <div id="zonePanel">
+      <label>Current frame — exposure zones</label>
+      <div id="zoneBar">
+        <div class="seg seg-shadow" id="segShadow"></div>
+        <div class="seg seg-mid" id="segMid"></div>
+        <div class="seg seg-highlight" id="segHighlight"></div>
+      </div>
+      <div id="zoneLegend">
+        <span id="legendShadow">Shadows —</span>
+        <span id="legendMid">Mids —</span>
+        <span id="legendHighlight">Highlights —</span>
+      </div>
+      <div id="zoneWarnings"></div>
+    </div>
 
     <div id="verdict"></div>
     <ol id="steps"></ol>

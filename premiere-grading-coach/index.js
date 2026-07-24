@@ -98,19 +98,80 @@ function renderVerdict(verdictText) {
   else el.classList.add("achievable");
 }
 
-function renderSteps(operations) {
+function renderZoneBar(zones) {
+  const panel = document.getElementById("zonePanel");
+  panel.style.display = "block";
+  document.getElementById("segShadow").style.width = `${zones.shadowPct}%`;
+  document.getElementById("segMid").style.width = `${zones.midPct}%`;
+  document.getElementById("segHighlight").style.width = `${zones.highlightPct}%`;
+  document.getElementById("legendShadow").textContent = `Shadows ${zones.shadowPct}%`;
+  document.getElementById("legendMid").textContent = `Mids ${zones.midPct}%`;
+  document.getElementById("legendHighlight").textContent = `Highlights ${zones.highlightPct}%`;
+
+  const warnings = [];
+  if (zones.clippedPct >= 1) warnings.push(`Clipping highlights: ${zones.clippedPct}% of frame at max value.`);
+  if (zones.crushedPct >= 1) warnings.push(`Crushed shadows: ${zones.crushedPct}% of frame at black.`);
+  document.getElementById("zoneWarnings").textContent = warnings.join(" ");
+}
+
+// Formats a raw ComponentParam value for display next to a recipe step.
+function formatLumetriValue(value) {
+  if (typeof value === "number") return Math.round(value * 100) / 100;
+  if (value == null) return null;
+  if (typeof value === "object") {
+    if ("value" in value) return formatLumetriValue(value.value);
+    return null; // complex types (color wheels, curves) — not worth rendering inline
+  }
+  return String(value);
+}
+
+// The recipe names a control like "Shadows" or "Temperature" — look it up
+// in the values Premiere actually reported for this clip, so a step reads
+// as "Shadows: currently 12 -> increase by ~10", not just the instruction
+// in isolation. Exact match first, then substring, since Gemini was only
+// asked for "the exact Lumetri control name" and generally complies but
+// isn't guaranteed to match displayName casing/spacing exactly.
+function lookupCurrentValue(lumetriValues, toolName) {
+  if (!lumetriValues || !toolName) return null;
+  if (toolName in lumetriValues) return formatLumetriValue(lumetriValues[toolName]);
+  const lower = toolName.toLowerCase();
+  const key = Object.keys(lumetriValues).find((k) => k.toLowerCase() === lower)
+    || Object.keys(lumetriValues).find((k) => k.toLowerCase().includes(lower) || lower.includes(k.toLowerCase()));
+  return key ? formatLumetriValue(lumetriValues[key]) : null;
+}
+
+function renderSteps(operations, lumetriValues) {
   const list = document.getElementById("steps");
   list.innerHTML = "";
-  (operations || []).forEach((op) => {
+  (operations || []).forEach((op, i) => {
     const li = document.createElement("li");
+
+    const head = document.createElement("div");
+    head.className = "step-head";
     const tool = document.createElement("span");
     tool.className = "step-tool";
-    tool.textContent = `${op.tool}: ${op.direction_or_value}`;
+    tool.textContent = `${i + 1}. ${op.tool}`;
+    head.appendChild(tool);
+
+    const current = lookupCurrentValue(lumetriValues, op.tool);
+    if (current !== null) {
+      const cur = document.createElement("span");
+      cur.className = "step-current";
+      cur.textContent = `currently ${current}`;
+      head.appendChild(cur);
+    }
+    li.appendChild(head);
+
+    const direction = document.createElement("div");
+    direction.className = "step-direction";
+    direction.textContent = op.direction_or_value || "";
+    li.appendChild(direction);
+
     const reason = document.createElement("div");
     reason.className = "step-reason";
     reason.textContent = op.reasoning || "";
-    li.appendChild(tool);
     li.appendChild(reason);
+
     list.appendChild(li);
   });
 }
@@ -119,6 +180,7 @@ document.getElementById("btnCheckGrade").addEventListener("click", async () => {
   const button = document.getElementById("btnCheckGrade");
   button.disabled = true;
   document.getElementById("verdict").style.display = "none";
+  document.getElementById("zonePanel").style.display = "none";
   document.getElementById("steps").innerHTML = "";
 
   try {
@@ -174,6 +236,7 @@ document.getElementById("btnCheckGrade").addEventListener("click", async () => {
         throw new Error(`export reported success but couldn't read "${candidates.join('" or "')}" in ${folder.nativePath} after retries: ${lastErr}`);
       }
       zones = computeZones(imageData);
+      renderZoneBar(zones);
     } catch (err) {
       renderVerdict(`Couldn't export/analyze the current frame: ${err}`);
       return;
@@ -212,7 +275,7 @@ document.getElementById("btnCheckGrade").addEventListener("click", async () => {
     }
 
     renderVerdict(recipe.verdict);
-    renderSteps(recipe.operations);
+    renderSteps(recipe.operations, lumetriResult && lumetriResult.found ? lumetriResult.values : null);
     if (recipe.analysis) log(`Analysis: ${recipe.analysis}`);
   } catch (err) {
     renderVerdict(`Error: ${err}`);
