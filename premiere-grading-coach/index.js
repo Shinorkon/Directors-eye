@@ -25,7 +25,7 @@ const ppro = require("premierepro");
 const uxp = require("uxp");
 const { loadImageData, computeZones } = require("./photometrics.js");
 const { findLumetriValues } = require("./lumetri.js");
-const { analyzeReference, getGradingRecipe, generatePreview } = require("./gemini.js");
+const { analyzeReference, getGradingRecipe, generatePreview, reportClientError } = require("./gemini.js");
 
 // Confirmed earlier in this project: the camera's log profile. Hardcoded
 // rather than detected, since nothing here can currently tell log profiles
@@ -45,6 +45,16 @@ let referenceMimeType = null;
 let captureBusy = false;
 let liveEnabled = true;
 let liveTimer = null;
+
+// Catches anything that escapes every try/catch below — e.g. a script-load
+// error or a rejected promise nobody awaited — so a totally silent failure
+// still shows up on the server side instead of just a dead panel.
+window.addEventListener("error", (e) => {
+  reportClientError("uncaught", e.message || String(e.error), { stage: currentStage });
+});
+window.addEventListener("unhandledrejection", (e) => {
+  reportClientError("unhandled-rejection", String(e.reason), { stage: currentStage });
+});
 
 function mimeTypeFromFilename(name) {
   const ext = name.split(".").pop().toLowerCase();
@@ -74,7 +84,12 @@ function withTimeout(promise, ms, label) {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
+// Tracked so any catch block can report which stage was in flight when it
+// failed, without threading a label through every call site by hand.
+let currentStage = "idle";
+
 function setStatus(text) {
+  currentStage = text;
   const el = document.getElementById("status");
   el.classList.add("visible");
   document.getElementById("statusText").textContent = text;
@@ -110,9 +125,14 @@ async function getActiveSequence() {
 async function exportAndRead(seq, filename, readFn, width, height) {
   const folder = await uxp.storage.localFileSystem.getDataFolder();
   const playerPos = await withTimeout(seq.getPlayerPosition(), 10000, "Reading playhead position");
+  // Full-res exports (1920x1080, for "Check my grade" / "Preview") are a
+  // much bigger disk write than the 320x180 live-loop ticks — give them
+  // more headroom instead of sharing the same 20s budget that was tuned
+  // for the small export.
+  const exportTimeoutMs = width * height > 320 * 180 ? 45000 : 20000;
   const ok = await withTimeout(
     ppro.Exporter.exportSequenceFrame(seq, playerPos, filename, folder.nativePath, width, height),
-    20000,
+    exportTimeoutMs,
     "Exporting current frame"
   );
   if (!ok) {
@@ -315,6 +335,7 @@ function renderSteps(operations, lumetriValues) {
 // to look at.
 
 let lastLivePosKey = null;
+let lastLiveErrorReported = null;
 
 async function pollPlayhead() {
   if (!liveEnabled || captureBusy) return;
@@ -338,8 +359,15 @@ async function pollPlayhead() {
       captureBusy = false;
     }
   } catch (err) {
-    // Silent — live view shouldn't spam the error box on every poll. If
-    // it's a persistent problem, "Check my grade" will surface it.
+    // Silent in the UI — live view shouldn't spam the error box on every
+    // poll. Still reported once per distinct message so a persistent
+    // problem is visible server-side without waiting for a manual "Check
+    // my grade" click.
+    const msg = String(err);
+    if (msg !== lastLiveErrorReported) {
+      lastLiveErrorReported = msg;
+      reportClientError("live-poll", msg, { stage: currentStage });
+    }
   }
 }
 
@@ -401,6 +429,7 @@ document.getElementById("btnPreview").addEventListener("click", async () => {
     document.getElementById("previewPanel").style.display = "block";
   } catch (err) {
     showError(String(err));
+    reportClientError(currentStage, String(err), { action: "preview" });
   } finally {
     clearStatus();
     button.disabled = false;
@@ -469,6 +498,7 @@ document.getElementById("btnCheckGrade").addEventListener("click", async () => {
     renderSteps(recipe.operations, lumetriResult && lumetriResult.found ? lumetriResult.values : null);
   } catch (err) {
     showError(String(err));
+    reportClientError(currentStage, String(err), { action: "check_grade" });
   } finally {
     clearStatus();
     button.disabled = false;

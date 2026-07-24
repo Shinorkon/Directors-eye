@@ -40,6 +40,12 @@ class PreviewRequest(BaseModel):
     reference_mime_type: str | None = None
 
 
+class ClientLogRequest(BaseModel):
+    stage: str | None = None
+    message: str
+    context: dict | None = None
+
+
 @router.post("/analyze-reference")
 async def analyze_reference(request: AnalyzeReferenceRequest):
     if not request.image_base64:
@@ -72,6 +78,16 @@ async def recipe(request: RecipeRequest):
         raise HTTPException(status_code=502, detail=f"Recipe generation failed: {e}")
 
     return result
+
+
+@router.post("/client-log")
+async def client_log(request: ClientLogRequest):
+    """Fire-and-forget error reports from the UXP panel itself — the panel
+    runs inside Premiere on a machine we can't screen-share into, so this is
+    how a real failure (export, Lumetri read, network) becomes visible on
+    the server side instead of depending on the user relaying a screenshot."""
+    print(f"[grading-coach client] stage={request.stage!r} message={request.message!r} context={request.context}")
+    return {"ok": True}
 
 
 @router.post("/preview")

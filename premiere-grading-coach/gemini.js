@@ -58,4 +58,20 @@ async function generatePreview({ frameBase64, frameMimeType, visionText, referen
   });
 }
 
-module.exports = { analyzeReference, getGradingRecipe, generatePreview };
+// Best-effort error reporting back to the backend, so a real failure inside
+// Premiere (export, Lumetri read, network) shows up in the server logs
+// instead of depending on someone relaying a screenshot from a machine we
+// can't see. Never throws, never blocks the caller on its own success.
+async function reportClientError(stage, message, context) {
+  try {
+    await fetch(`${API_BASE}/client-log`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stage: stage || null, message: String(message), context: context || null }),
+    });
+  } catch (e) {
+    // Logging itself failing (e.g. no network at all) is not worth surfacing.
+  }
+}
+
+module.exports = { analyzeReference, getGradingRecipe, generatePreview, reportClientError };
