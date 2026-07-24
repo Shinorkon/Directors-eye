@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <script src="index.js"></script>
+    <style>
+      body {
+        font-family: sans-serif;
+        padding: 10px;
+        font-size: 12px;
+      }
+      h4 {
+        margin: 0 0 8px;
+      }
+      section {
+        margin-bottom: 14px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #444;
+      }
+      label {
+        display: block;
+        margin-bottom: 4px;
+        color: #aaa;
+      }
+      input[type="password"],
+      input[type="text"] {
+        width: 100%;
+        box-sizing: border-box;
+        margin-bottom: 6px;
+      }
+      #verdict {
+        padding: 8px;
+        border-radius: 4px;
+        margin: 10px 0;
+        font-weight: bold;
+        display: none;
+      }
+      #verdict.achievable {
+        background: #123a1f;
+        color: #7ee2a0;
+      }
+      #verdict.partial {
+        background: #3a3212;
+        color: #e2c97e;
+      }
+      #verdict.blocked {
+        background: #3a1212;
+        color: #e27e7e;
+      }
+      #steps {
+        padding-left: 18px;
+      }
+      #steps li {
+        margin-bottom: 8px;
+      }
+      .step-tool {
+        font-weight: bold;
+      }
+      .step-reason {
+        color: #999;
+      }
+      #log {
+        white-space: pre-wrap;
+        background: #111;
+        color: #0f0;
+        padding: 8px;
+        margin-top: 8px;
+        max-height: 280px;
+        overflow: auto;
+        font-size: 11px;
+      }
+      #refThumb {
+        max-width: 100%;
+        max-height: 90px;
+        display: none;
+        margin-top: 6px;
+        border-radius: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <h4>Grading coach</h4>
+
+    <section>
+      <label for="apiKey">Gemini API key (saved locally, never in source)</label>
+      <input type="password" id="apiKey" placeholder="paste your Gemini API key" />
+      <button id="btnSaveKey">Save key</button>
+      <span id="keyStatus" style="margin-left: 8px; color: #888;"></span>
+    </section>
+
+    <section>
+      <label>Reference look (optional)</label>
+      <button id="btnPickReference">Choose reference image</button>
+      <span id="refStatus" style="margin-left: 8px; color: #888;"></span>
+      <img id="refThumb" />
+    </section>
+
+    <section>
+      <button id="btnCheckGrade" style="width: 100%; padding: 8px; font-weight: bold;">
+        Check my grade
+      </button>
+    </section>
+
+    <div id="verdict"></div>
+    <ol id="steps"></ol>
+
+    <details style="margin-top: 10px;">
+      <summary>Diagnostics (Phase 0 spike tools)</summary>
+      <br />
+      <button id="btnInfo">Get sequence info</button>
+      <br /><br />
+      <button id="btnExport">Export current frame</button>
+      <br /><br />
+      <button id="btnLumetri">List clip components + params</button>
+      <br /><br />
+      <button id="btnAnalyze">Analyze exported frame</button>
+      <pre id="log"></pre>
+    </details>
+  </body>
+</html>
