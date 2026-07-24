@@ -129,20 +129,45 @@ document.getElementById("btnCheckGrade").addEventListener("click", async () => {
     }
     const { proj, seq } = ctx;
 
-    // 1. Export the current frame to the plugin's own temp folder — no
-    // picker prompt needed for the main flow.
+    // 1. Export the current frame — no picker prompt needed for the main
+    // flow, so this uses the plugin's own persistent data folder rather
+    // than getTemporaryFolder(). Confirmed live (2026-07-24): exporting to
+    // the plugin-temp:/ folder returned no discoverable entry under either
+    // filename variant — most likely that folder isn't a real, already-
+    // existing native directory the way a user-picked folder (which the
+    // diagnostics "Export current frame" button uses) or the data folder
+    // is, so Premiere's native exporter has nothing to write into. The
+    // data folder is eagerly created by UXP and backs this plugin
+    // persistently, so it should behave like the working diagnostics case.
     let zones;
     try {
-      const folder = await uxp.storage.localFileSystem.getTemporaryFolder();
+      const folder = await uxp.storage.localFileSystem.getDataFolder();
       const filename = "gradingcoach_check.png";
       const playerPos = await seq.getPlayerPosition();
-      await ppro.Exporter.exportSequenceFrame(seq, playerPos, filename, folder.nativePath, 1920, 1080);
+      const ok = await ppro.Exporter.exportSequenceFrame(seq, playerPos, filename, folder.nativePath, 1920, 1080);
+      if (!ok) {
+        throw new Error(`exportSequenceFrame() returned false (folder: ${folder.nativePath})`);
+      }
 
-      let fileEntry;
-      try {
-        fileEntry = await folder.getEntry(filename);
-      } catch (_e) {
-        fileEntry = await folder.getEntry(filename + ".png");
+      // Entry visibility can lag the native write by a beat, and the
+      // exporter sometimes double-appends .png — retry both names briefly
+      // before giving up, so a one-frame race doesn't read as a hard failure.
+      let fileEntry = null;
+      let lastErr = null;
+      const candidates = [filename, filename + ".png"];
+      for (let attempt = 0; attempt < 3 && !fileEntry; attempt++) {
+        if (attempt > 0) await new Promise((r) => setTimeout(r, 200));
+        for (const name of candidates) {
+          try {
+            fileEntry = await folder.getEntry(name);
+            break;
+          } catch (e) {
+            lastErr = e;
+          }
+        }
+      }
+      if (!fileEntry) {
+        throw new Error(`export reported success but no file found as "${candidates.join('" or "')}" in ${folder.nativePath}: ${lastErr}`);
       }
       const imageData = await loadImageData(fileEntry);
       zones = computeZones(imageData);
