@@ -12,7 +12,7 @@ const ppro = require("premierepro");
 const uxp = require("uxp");
 const { loadImageData, computeZones } = require("./photometrics.js");
 const { findLumetriValues } = require("./lumetri.js");
-const { loadApiKey, saveApiKey, analyzeReference, getGradingRecipe } = require("./gemini.js");
+const { analyzeReference, getGradingRecipe } = require("./gemini.js");
 
 // Confirmed earlier in this project: the camera's log profile. Hardcoded
 // rather than detected, since nothing here can currently tell log profiles
@@ -59,26 +59,6 @@ async function getActiveSequence() {
   }
   return { proj, seq };
 }
-
-// ---------- API key ----------
-
-async function refreshKeyStatus() {
-  const key = await loadApiKey();
-  document.getElementById("keyStatus").textContent = key
-    ? "Key saved."
-    : "No key saved yet.";
-  return key;
-}
-
-document.getElementById("btnSaveKey").addEventListener("click", async () => {
-  const value = document.getElementById("apiKey").value.trim();
-  if (!value) return;
-  await saveApiKey(value);
-  document.getElementById("apiKey").value = "";
-  await refreshKeyStatus();
-});
-
-refreshKeyStatus();
 
 // ---------- Reference image ----------
 
@@ -142,12 +122,6 @@ document.getElementById("btnCheckGrade").addEventListener("click", async () => {
   document.getElementById("steps").innerHTML = "";
 
   try {
-    const apiKey = await loadApiKey();
-    if (!apiKey) {
-      renderVerdict("No Gemini API key saved — paste one above first.");
-      return;
-    }
-
     const ctx = await getActiveSequence();
     if (!ctx) {
       renderVerdict("No active sequence found in Premiere.");
@@ -189,14 +163,14 @@ document.getElementById("btnCheckGrade").addEventListener("click", async () => {
     let referenceLook = null;
     if (referenceBase64) {
       try {
-        referenceLook = await analyzeReference(apiKey, referenceBase64, referenceMimeType);
+        referenceLook = await analyzeReference(referenceBase64, referenceMimeType);
       } catch (err) {
         log(`Reference analysis failed: ${err}`);
       }
     }
 
-    // 4. Ask Gemini for the recipe.
-    const recipe = await getGradingRecipe(apiKey, {
+    // 4. Ask the backend for the recipe.
+    const recipe = await getGradingRecipe({
       zones,
       lumetriValues: lumetriResult && lumetriResult.found ? lumetriResult.values : null,
       referenceLook,

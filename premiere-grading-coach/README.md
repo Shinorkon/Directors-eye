@@ -15,7 +15,7 @@ demo.
 ## Files
 
 - `manifest.json` — plugin config: panel size, `localFileSystem` +
-  `network` (Gemini domain) permissions.
+  `network` (directors-eye.shinorkon.com) permissions.
 - `index.html` / `index.js` — the panel UI and main wiring.
 - `photometrics.js` — loads an exported PNG into a canvas, computes
   shadow/mid/highlight/clip/crush percentages from raw code values, plus an
@@ -25,9 +25,12 @@ demo.
   "lumetri" on the first clip on video track 1, reads all its params
   generically (no hardcoded matchName/indices, since those were never
   confirmed against a real project).
-- `gemini.js` — stores the API key locally (`plugin-data:/gemini_key.json`,
-  never in source), analyzes an optional reference image, and gets the
-  actual recipe.
+- `gemini.js` — calls Director's Eye's own hosted backend
+  (`https://directors-eye.shinorkon.com/api/grading-coach/...`) for the
+  reference-image analysis and the recipe call. No API key or local backend
+  needed on the Windows/VM side — the server already has `GEMINI_API_KEY`
+  configured (see `backend/services/grading_coach.py` and
+  `backend/routers/grading_coach.py`).
 
 ## Setup (on the Windows/VM side, where Premiere runs)
 
@@ -37,9 +40,9 @@ demo.
 4. In UDT: **Add Plugin** → point it at this folder's `manifest.json`.
 5. Click **Load & Watch**.
 6. In Premiere: **Window → UXP Plugins → Grading Coach** if the panel doesn't appear.
-7. Paste a Gemini API key into the panel's key field and click **Save key**
-   — the same key from `Shnuk/backend/.env` or `directors-eye/backend/.env`
-   works.
+
+That's it — no key to paste in, no local server to run. The panel talks
+directly to the already-deployed backend.
 
 ## Before you click "Check my grade"
 

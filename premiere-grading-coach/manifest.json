@@ -12,7 +12,7 @@
   "requiredPermissions": {
     "localFileSystem": "request",
     "network": {
-      "domains": ["https://generativelanguage.googleapis.com"]
+      "domains": ["https://directors-eye.shinorkon.com"]
     }
   },
   "entrypoints": [
