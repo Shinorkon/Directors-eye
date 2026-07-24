@@ -102,6 +102,46 @@
         border-radius: var(--radius);
         border: 1px solid var(--border);
       }
+      #liveHeader {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 6px;
+      }
+      #liveHeader label {
+        margin-bottom: 0;
+      }
+      .live-switch {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 10.5px;
+        color: var(--text-dim);
+        cursor: pointer;
+        text-transform: none;
+        letter-spacing: 0;
+      }
+      #liveNote {
+        display: none;
+        font-size: 11px;
+        color: var(--text-dim);
+        margin-top: 4px;
+      }
+      #liveValues {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        margin-top: 8px;
+      }
+      .value-chip {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 3px;
+        padding: 3px 7px;
+        font-size: 10.5px;
+        color: var(--text);
+        white-space: nowrap;
+      }
       #zonePanel {
         display: none;
         margin-bottom: 16px;
@@ -234,14 +274,84 @@
         border-radius: var(--radius);
         font-size: 11px;
       }
+      textarea#visionText {
+        width: 100%;
+        box-sizing: border-box;
+        resize: vertical;
+        min-height: 44px;
+        font-family: inherit;
+        font-size: 12px;
+        color: var(--text);
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 7px 9px;
+      }
+      .btn-row {
+        display: flex;
+        gap: 8px;
+      }
+      .btn-row button {
+        flex: 1;
+      }
+      #previewPanel {
+        display: none;
+        margin-bottom: 16px;
+      }
+      #previewImages {
+        display: flex;
+        gap: 8px;
+      }
+      #previewImages figure {
+        flex: 1;
+        margin: 0;
+      }
+      #previewImages img {
+        width: 100%;
+        display: block;
+        border-radius: var(--radius);
+        border: 1px solid var(--border);
+      }
+      #previewImages figcaption {
+        font-size: 10.5px;
+        color: var(--text-dim);
+        text-align: center;
+        margin-top: 4px;
+      }
     </style>
   </head>
   <body>
     <h4>Grading coach</h4>
 
     <section>
-      <label>Reference look (optional)</label>
-      <div id="refRow">
+      <div id="liveHeader">
+        <label>Live — current frame</label>
+        <label class="live-switch">
+          <input type="checkbox" id="liveToggle" checked />
+          auto
+        </label>
+      </div>
+      <div id="zonePanel">
+        <div id="zoneBar">
+          <div class="seg seg-shadow" id="segShadow"></div>
+          <div class="seg seg-mid" id="segMid"></div>
+          <div class="seg seg-highlight" id="segHighlight"></div>
+        </div>
+        <div id="zoneLegend">
+          <span id="legendShadow">Shadows —</span>
+          <span id="legendMid">Mids —</span>
+          <span id="legendHighlight">Highlights —</span>
+        </div>
+        <div id="zoneWarnings"></div>
+      </div>
+      <div id="liveValues"></div>
+      <div id="liveNote"></div>
+    </section>
+
+    <section>
+      <label>Vision (optional)</label>
+      <textarea id="visionText" placeholder="Describe the look you want — e.g. warm golden-hour glow, deep filmic blacks, slightly desaturated"></textarea>
+      <div id="refRow" style="margin-top: 8px;">
         <button id="btnPickReference">Choose reference image</button>
         <span id="refStatus"></span>
       </div>
@@ -249,25 +359,27 @@
     </section>
 
     <section>
-      <button id="btnCheckGrade">Check my grade</button>
+      <div class="btn-row">
+        <button id="btnPreview">Preview my target look</button>
+        <button id="btnCheckGrade">Check my grade</button>
+      </div>
     </section>
 
     <div id="status"><span class="spinner"></span><span id="statusText"></span></div>
     <div id="errorBox"></div>
 
-    <div id="zonePanel">
-      <label>Current frame — exposure zones</label>
-      <div id="zoneBar">
-        <div class="seg seg-shadow" id="segShadow"></div>
-        <div class="seg seg-mid" id="segMid"></div>
-        <div class="seg seg-highlight" id="segHighlight"></div>
+    <div id="previewPanel">
+      <label>Target look preview</label>
+      <div id="previewImages">
+        <figure>
+          <img id="previewCurrent" />
+          <figcaption>Current</figcaption>
+        </figure>
+        <figure>
+          <img id="previewTarget" />
+          <figcaption>Target look</figcaption>
+        </figure>
       </div>
-      <div id="zoneLegend">
-        <span id="legendShadow">Shadows —</span>
-        <span id="legendMid">Mids —</span>
-        <span id="legendHighlight">Highlights —</span>
-      </div>
-      <div id="zoneWarnings"></div>
     </div>
 
     <div id="verdict"></div>

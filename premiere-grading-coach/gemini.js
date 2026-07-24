@@ -35,13 +35,27 @@ async function analyzeReference(base64Data, mimeType) {
   });
 }
 
-async function getGradingRecipe({ zones, lumetriValues, referenceLook, logProfile }) {
+async function getGradingRecipe({ zones, lumetriValues, visionText, referenceLook, logProfile }) {
   return postJson("/recipe", {
     zones,
     lumetriValues: lumetriValues || null,
+    visionText: visionText || null,
     referenceLook: referenceLook || null,
     logProfile: logProfile || "unknown",
   });
 }
 
-module.exports = { analyzeReference, getGradingRecipe };
+// Renders a preview of the current frame under the target grade (vision
+// text and/or a reference image) — a generated image only, never written
+// back to Premiere.
+async function generatePreview({ frameBase64, frameMimeType, visionText, referenceBase64, referenceMimeType }) {
+  return postJson("/preview", {
+    frame_base64: frameBase64,
+    frame_mime_type: frameMimeType || "image/png",
+    vision_text: visionText || null,
+    reference_base64: referenceBase64 || null,
+    reference_mime_type: referenceMimeType || null,
+  });
+}
+
+module.exports = { analyzeReference, getGradingRecipe, generatePreview };
