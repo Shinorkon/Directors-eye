@@ -198,33 +198,41 @@
         color: var(--text-dim);
         margin-top: 4px;
       }
-      details {
-        margin-top: 4px;
-      }
-      summary {
+      #status {
+        display: none;
+        align-items: center;
+        gap: 8px;
         color: var(--text-dim);
-        cursor: pointer;
-        font-size: 11px;
-        text-transform: uppercase;
-        letter-spacing: 0.03em;
-        padding: 4px 0;
+        font-size: 11.5px;
+        margin: 4px 0 16px;
       }
-      details button {
-        width: 100%;
-        text-align: left;
-        margin-top: 6px;
+      #status.visible {
+        display: flex;
       }
-      #log {
+      #status .spinner {
+        width: 11px;
+        height: 11px;
+        border-radius: 50%;
+        border: 2px solid #4a4a4a;
+        border-top-color: var(--accent-hover);
+        animation: spin 0.7s linear infinite;
+        flex-shrink: 0;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      #errorBox {
+        display: none;
         white-space: pre-wrap;
-        background: #111;
-        color: #0f0;
-        padding: 8px;
-        margin-top: 10px;
-        max-height: 280px;
-        overflow: auto;
-        font-size: 11px;
+        background: #2a1414;
+        color: #e2a0a0;
+        border: 1px solid #5c1e1e;
+        padding: 8px 10px;
+        margin: 4px 0 16px;
         border-radius: var(--radius);
-        border: 1px solid var(--border);
+        font-size: 11px;
       }
     </style>
   </head>
@@ -244,6 +252,9 @@
       <button id="btnCheckGrade">Check my grade</button>
     </section>
 
+    <div id="status"><span class="spinner"></span><span id="statusText"></span></div>
+    <div id="errorBox"></div>
+
     <div id="zonePanel">
       <label>Current frame — exposure zones</label>
       <div id="zoneBar">
@@ -261,14 +272,5 @@
 
     <div id="verdict"></div>
     <ol id="steps"></ol>
-
-    <details>
-      <summary>Diagnostics (Phase 0 spike tools)</summary>
-      <button id="btnInfo">Get sequence info</button>
-      <button id="btnExport">Export current frame</button>
-      <button id="btnLumetri">List clip components + params</button>
-      <button id="btnAnalyze">Analyze exported frame</button>
-      <pre id="log"></pre>
-    </details>
   </body>
 </html>

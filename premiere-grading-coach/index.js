@@ -2,11 +2,14 @@
 //
 // Main flow (btnCheckGrade): export current frame -> read real photometric
 // zones from it -> read Lumetri's actual current values from Premiere ->
-// optionally fold in a reference look -> ask Gemini for a numbered recipe
-// of named Lumetri adjustments + an honest achievability verdict.
+// optionally fold in a reference look -> ask the backend for a numbered
+// recipe of named Lumetri adjustments + an honest achievability verdict.
 //
-// Diagnostics section is the original Phase 0 spike, kept as a fallback so
-// if the main flow breaks, you can see exactly which piece failed.
+// Every step below is wrapped in a timeout. Earlier versions had no timeout
+// anywhere, so a stuck native call or a dead network request left the
+// button disabled forever with zero feedback — indistinguishable from the
+// panel just not working. Now every stage reports live status, and any
+// failure (including a timeout) surfaces as a real error instead of a hang.
 
 const ppro = require("premierepro");
 const uxp = require("uxp");
@@ -19,8 +22,6 @@ const { analyzeReference, getGradingRecipe } = require("./gemini.js");
 // apart from pixels alone.
 const LOG_PROFILE = "Sony S-Log3";
 
-let lastExportFolder = null;
-let lastExportFilename = null;
 let referenceBase64 = null;
 let referenceMimeType = null;
 
@@ -28,12 +29,6 @@ function mimeTypeFromFilename(name) {
   const ext = name.split(".").pop().toLowerCase();
   if (ext === "png") return "image/png";
   return "image/jpeg"; // covers jpg/jpeg
-}
-
-function log(msg) {
-  const el = document.getElementById("log");
-  el.textContent += msg + "\n";
-  el.scrollTop = el.scrollHeight;
 }
 
 function arrayBufferToBase64(buffer) {
@@ -46,17 +41,39 @@ function arrayBufferToBase64(buffer) {
   return btoa(binary);
 }
 
+function withTimeout(promise, ms, label) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms / 1000}s`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+function setStatus(text) {
+  const el = document.getElementById("status");
+  el.classList.add("visible");
+  document.getElementById("statusText").textContent = text;
+}
+
+function clearStatus() {
+  document.getElementById("status").classList.remove("visible");
+}
+
+function showError(text) {
+  const el = document.getElementById("errorBox");
+  el.style.display = "block";
+  el.textContent = text;
+}
+
+function clearError() {
+  document.getElementById("errorBox").style.display = "none";
+}
+
 async function getActiveSequence() {
   const proj = await ppro.Project.getActiveProject();
-  if (!proj) {
-    log("No active project — open a project in Premiere first.");
-    return null;
-  }
+  if (!proj) throw new Error("No active project — open a project in Premiere first.");
   const seq = await proj.getActiveSequence();
-  if (!seq) {
-    log("No active sequence — open a sequence in the timeline.");
-    return null;
-  }
+  if (!seq) throw new Error("No active sequence — open a sequence in the timeline.");
   return { proj, seq };
 }
 
@@ -182,231 +199,103 @@ document.getElementById("btnCheckGrade").addEventListener("click", async () => {
   document.getElementById("verdict").style.display = "none";
   document.getElementById("zonePanel").style.display = "none";
   document.getElementById("steps").innerHTML = "";
+  clearError();
 
   try {
-    const ctx = await getActiveSequence();
-    if (!ctx) {
-      renderVerdict("No active sequence found in Premiere.");
-      return;
+    setStatus("Reading sequence…");
+    const { proj, seq } = await withTimeout(getActiveSequence(), 10000, "Reading sequence");
+
+    // 1. Export the current frame to the plugin's own persistent data
+    // folder (not getTemporaryFolder() — that returned no discoverable
+    // entry under either filename variant when tried).
+    setStatus("Exporting current frame…");
+    const folder = await uxp.storage.localFileSystem.getDataFolder();
+    const filename = "gradingcoach_check.png";
+    const playerPos = await withTimeout(seq.getPlayerPosition(), 10000, "Reading playhead position");
+    const ok = await withTimeout(
+      ppro.Exporter.exportSequenceFrame(seq, playerPos, filename, folder.nativePath, 1920, 1080),
+      20000,
+      "Exporting current frame"
+    );
+    if (!ok) {
+      throw new Error(`Frame export failed (exportSequenceFrame returned false, folder: ${folder.nativePath})`);
     }
-    const { proj, seq } = ctx;
 
-    // 1. Export the current frame — no picker prompt needed for the main
-    // flow, so this uses the plugin's own persistent data folder rather
-    // than getTemporaryFolder(). Confirmed live (2026-07-24): exporting to
-    // the plugin-temp:/ folder returned no discoverable entry under either
-    // filename variant — most likely that folder isn't a real, already-
-    // existing native directory the way a user-picked folder (which the
-    // diagnostics "Export current frame" button uses) or the data folder
-    // is, so Premiere's native exporter has nothing to write into. The
-    // data folder is eagerly created by UXP and backs this plugin
-    // persistently, so it should behave like the working diagnostics case.
-    let zones;
-    try {
-      const folder = await uxp.storage.localFileSystem.getDataFolder();
-      const filename = "gradingcoach_check.png";
-      const playerPos = await seq.getPlayerPosition();
-      const ok = await ppro.Exporter.exportSequenceFrame(seq, playerPos, filename, folder.nativePath, 1920, 1080);
-      if (!ok) {
-        throw new Error(`exportSequenceFrame() returned false (folder: ${folder.nativePath})`);
-      }
-
-      // Entry visibility (and the underlying write lock) can lag the native
-      // export by a beat, and the exporter sometimes double-appends .png —
-      // retry the *whole* find-then-read step, not just the lookup, since
-      // the directory entry can appear before Premiere releases its write
-      // handle on the file (that's what threw "resource busy or locked"
-      // here even though getEntry() had already succeeded).
-      const candidates = [filename, filename + ".png"];
-      let imageData = null;
-      let lastErr = null;
-      for (let attempt = 0; attempt < 6 && !imageData; attempt++) {
-        if (attempt > 0) await new Promise((r) => setTimeout(r, 300 * attempt));
-        for (const name of candidates) {
-          try {
-            const fileEntry = await folder.getEntry(name);
-            imageData = await loadImageData(fileEntry);
-            break;
-          } catch (e) {
-            lastErr = e;
-          }
+    // Entry visibility (and the underlying write lock) can lag the native
+    // export by a beat, and the exporter sometimes double-appends .png —
+    // retry the whole find-then-read step, since the directory entry can
+    // appear before Premiere releases its write handle on the file.
+    setStatus("Reading exported frame…");
+    const candidates = [filename, filename + ".png"];
+    let imageData = null;
+    let lastErr = null;
+    for (let attempt = 0; attempt < 6 && !imageData; attempt++) {
+      if (attempt > 0) await new Promise((r) => setTimeout(r, 300 * attempt));
+      for (const name of candidates) {
+        try {
+          const fileEntry = await folder.getEntry(name);
+          imageData = await loadImageData(fileEntry);
+          break;
+        } catch (e) {
+          lastErr = e;
         }
       }
-      if (!imageData) {
-        throw new Error(`export reported success but couldn't read "${candidates.join('" or "')}" in ${folder.nativePath} after retries: ${lastErr}`);
-      }
-      zones = computeZones(imageData);
-      renderZoneBar(zones);
-    } catch (err) {
-      renderVerdict(`Couldn't export/analyze the current frame: ${err}`);
-      return;
     }
+    if (!imageData) {
+      throw new Error(`Export reported success but couldn't read "${candidates.join('" or "')}" in ${folder.nativePath} after retries: ${lastErr}`);
+    }
+    const zones = computeZones(imageData);
+    renderZoneBar(zones);
 
-    // 2. Read Lumetri's actual current values.
+    // 2. Read Lumetri's actual current values. Non-fatal if it fails —
+    // the coach can still run on zones + reference alone, just without
+    // current-value readouts per step.
+    setStatus("Reading Lumetri values…");
     let lumetriResult = null;
     try {
-      lumetriResult = await findLumetriValues(proj, seq);
+      lumetriResult = await withTimeout(findLumetriValues(proj, seq), 15000, "Reading Lumetri values");
     } catch (err) {
-      log(`Lumetri read failed: ${err}`);
+      showError(`Note: couldn't read Lumetri values (${err}). Continuing without current-value readouts.`);
     }
 
-    // 3. Optional reference look.
+    // 3. Optional reference look. Also non-fatal.
     let referenceLook = null;
     if (referenceBase64) {
+      setStatus("Analyzing reference image…");
       try {
-        referenceLook = await analyzeReference(referenceBase64, referenceMimeType);
+        referenceLook = await withTimeout(
+          analyzeReference(referenceBase64, referenceMimeType),
+          20000,
+          "Analyzing reference image"
+        );
       } catch (err) {
-        log(`Reference analysis failed: ${err}`);
+        showError(`Note: reference image analysis failed (${err}). Continuing without it.`);
       }
     }
 
     // 4. Ask the backend for the recipe.
-    const recipe = await getGradingRecipe({
-      zones,
-      lumetriValues: lumetriResult && lumetriResult.found ? lumetriResult.values : null,
-      referenceLook,
-      logProfile: LOG_PROFILE,
-    });
+    setStatus("Asking the coach for a recipe…");
+    const recipe = await withTimeout(
+      getGradingRecipe({
+        zones,
+        lumetriValues: lumetriResult && lumetriResult.found ? lumetriResult.values : null,
+        referenceLook,
+        logProfile: LOG_PROFILE,
+      }),
+      25000,
+      "Asking the coach for a recipe"
+    );
 
     if (recipe.raw_text) {
-      renderVerdict("Gemini didn't return valid JSON — see diagnostics log.");
-      log(`Raw Gemini response: ${recipe.raw_text}`);
-      return;
+      throw new Error(`The coach backend didn't return valid JSON: ${recipe.raw_text.slice(0, 300)}`);
     }
 
     renderVerdict(recipe.verdict);
     renderSteps(recipe.operations, lumetriResult && lumetriResult.found ? lumetriResult.values : null);
-    if (recipe.analysis) log(`Analysis: ${recipe.analysis}`);
   } catch (err) {
-    renderVerdict(`Error: ${err}`);
+    showError(String(err));
   } finally {
+    clearStatus();
     button.disabled = false;
-  }
-});
-
-// ---------- Diagnostics (Phase 0 spike, unchanged) ----------
-
-document.getElementById("btnInfo").addEventListener("click", async () => {
-  log("--- Sequence info ---");
-  const ctx = await getActiveSequence();
-  if (!ctx) return;
-  const { seq } = ctx;
-  log(`Sequence name: ${seq.name}`);
-  const pos = await seq.getPlayerPosition();
-  log(`Player position: ${pos.seconds}s (ticks: ${pos.ticks})`);
-});
-
-document.getElementById("btnExport").addEventListener("click", async () => {
-  log("--- Export current frame ---");
-  const ctx = await getActiveSequence();
-  if (!ctx) return;
-  const { seq } = ctx;
-
-  try {
-    const folder = await uxp.storage.localFileSystem.getFolder();
-    if (!folder) {
-      log("No folder selected.");
-      return;
-    }
-    const folderDir = folder.nativePath;
-    const playerPos = await seq.getPlayerPosition();
-    const filename = "gradingcoach_still.png";
-
-    const t0 = Date.now();
-    const ok = await ppro.Exporter.exportSequenceFrame(
-      seq,
-      playerPos,
-      filename,
-      folderDir,
-      1920,
-      1080
-    );
-    const elapsedMs = Date.now() - t0;
-
-    log(`exportSequenceFrame() returned: ${ok}`);
-    log(`Took ${elapsedMs}ms — note this, it matters for a "check my grade" button.`);
-    log(`Look in: ${folderDir} (Premiere sometimes double-appends .png to the filename).`);
-
-    lastExportFolder = folder;
-    lastExportFilename = filename;
-  } catch (err) {
-    log(`Error: ${err}`);
-  }
-});
-
-document.getElementById("btnLumetri").addEventListener("click", async () => {
-  log("--- Clip components + params (video track 1, first clip) ---");
-  const ctx = await getActiveSequence();
-  if (!ctx) return;
-  const { proj, seq } = ctx;
-
-  try {
-    const result = await findLumetriValues(proj, seq);
-    if (!result) {
-      log("No video track 1 / no clips found.");
-      return;
-    }
-    log(`Clip "${result.clipName}" — components found:`);
-    result.allComponents.forEach((c) => {
-      log(`[${c.index}] ${c.displayName}  (matchName: ${c.matchName})`);
-    });
-
-    if (!result.found) {
-      log("");
-      log('No component with "lumetri" in its display name was found.');
-      return;
-    }
-
-    log("");
-    log(`Lumetri Color matchName: ${result.matchName}`);
-    Object.entries(result.values).forEach(([name, value]) => {
-      log(`    - ${name}: ${JSON.stringify(value)}`);
-    });
-    Object.entries(result.errors).forEach(([name, err]) => {
-      log(`    - ${name}: <getValueAtTime failed: ${err}>`);
-    });
-  } catch (err) {
-    log(`Error: ${err}`);
-  }
-});
-
-document.getElementById("btnAnalyze").addEventListener("click", async () => {
-  log("--- Analyze exported frame ---");
-  try {
-    let fileEntry;
-
-    if (lastExportFolder && lastExportFilename) {
-      try {
-        fileEntry = await lastExportFolder.getEntry(lastExportFilename);
-      } catch (_e) {
-        try {
-          fileEntry = await lastExportFolder.getEntry(lastExportFilename + ".png");
-        } catch (_e2) {
-          fileEntry = null;
-        }
-      }
-    }
-
-    if (!fileEntry) {
-      log("Couldn't find the last export automatically — pick the PNG manually.");
-      fileEntry = await uxp.storage.localFileSystem.getFileForOpening({
-        types: ["png"],
-      });
-    }
-
-    if (!fileEntry) {
-      log("No file selected.");
-      return;
-    }
-
-    const imageData = await loadImageData(fileEntry);
-    const zones = computeZones(imageData);
-
-    log(`Frame size: ${zones.width}x${zones.height}`);
-    log(`Mean luma (0-255): ${zones.meanLuma}`);
-    log(`Shadows: ${zones.shadowPct}%   Mids: ${zones.midPct}%   Highlights: ${zones.highlightPct}%`);
-    log(`Clipped (>=253): ${zones.clippedPct}%   Crushed (<=2): ${zones.crushedPct}%`);
-  } catch (err) {
-    log(`Error: ${err}`);
   }
 });
