@@ -192,8 +192,7 @@ document.getElementById("btnPickReference").addEventListener("click", async () =
 
 function renderVerdict(verdictText) {
   const el = document.getElementById("verdict");
-  el.style.display = "block";
-  el.textContent = verdictText || "";
+  document.getElementById("verdictText").textContent = verdictText || "";
   const lower = (verdictText || "").toLowerCase();
   el.className = "";
   if (lower.startsWith("not")) el.classList.add("blocked");
@@ -413,7 +412,7 @@ document.getElementById("btnPreview").addEventListener("click", async () => {
 document.getElementById("btnCheckGrade").addEventListener("click", async () => {
   const button = document.getElementById("btnCheckGrade");
   button.disabled = true;
-  document.getElementById("verdict").style.display = "none";
+  document.getElementById("verdict").className = "";
   document.getElementById("steps").innerHTML = "";
   clearError();
 
