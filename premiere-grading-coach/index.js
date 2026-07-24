@@ -2,11 +2,13 @@
 //
 // Three things happen here, on different cadences:
 //
-// 1. Live view — runs automatically on a timer the whole time the panel is
-//    open. No click needed. Exports the current frame, reads real zone
-//    percentages and Lumetri's actual slider values, and shows them. Purely
-//    local — no backend/Gemini call — so it's cheap enough to run every few
-//    seconds while you work.
+// 1. Live view — runs automatically the whole time the panel is open. No
+//    click needed. Polls the playhead position every second (cheap, no
+//    export), and only when it's actually moved does it export a small
+//    frame and read real zone percentages + Lumetri's actual slider
+//    values. Purely local — no backend/Gemini call — and reactive rather
+//    than a blind timer, so it doesn't compete with Premiere's own
+//    rendering when nothing's changed.
 // 2. "Preview my target look" — a deliberate click. Sends the current frame
 //    plus your vision text and/or reference image to the backend, which
 //    generates an image showing what that grade would look like on your
@@ -29,7 +31,6 @@ const { analyzeReference, getGradingRecipe, generatePreview } = require("./gemin
 // rather than detected, since nothing here can currently tell log profiles
 // apart from pixels alone.
 const LOG_PROFILE = "Sony S-Log3";
-const LIVE_INTERVAL_MS = 3000;
 
 // Only these are shown in the live values readout — Lumetri also reports
 // curves/wheels/HSL secondary as complex objects that aren't worth
@@ -106,11 +107,11 @@ async function getActiveSequence() {
 // directory entry can appear before Premiere releases its write lock on
 // the file — reading it right after getEntry() succeeds can still throw
 // "resource busy or locked".
-async function exportAndRead(seq, filename, readFn) {
+async function exportAndRead(seq, filename, readFn, width, height) {
   const folder = await uxp.storage.localFileSystem.getDataFolder();
   const playerPos = await withTimeout(seq.getPlayerPosition(), 10000, "Reading playhead position");
   const ok = await withTimeout(
-    ppro.Exporter.exportSequenceFrame(seq, playerPos, filename, folder.nativePath, 1920, 1080),
+    ppro.Exporter.exportSequenceFrame(seq, playerPos, filename, folder.nativePath, width, height),
     20000,
     "Exporting current frame"
   );
@@ -145,9 +146,12 @@ async function readAsBase64(fileEntry) {
 }
 
 // Shared by the live loop and "Check my grade" — export, compute zones,
-// read Lumetri. No Gemini call in here, so it's cheap to run on a timer.
-async function captureFrameState(proj, seq) {
-  const imageData = await exportAndRead(seq, "gradingcoach_live.png", loadImageData);
+// read Lumetri. No Gemini call in here. width/height are deliberately tiny
+// for live ticks — a histogram doesn't need full resolution, and exporting
+// a full 1920x1080 frame on every playhead move competed with Premiere's
+// own responsiveness for real footage.
+async function captureFrameState(proj, seq, width, height) {
+  const imageData = await exportAndRead(seq, "gradingcoach_live.png", loadImageData, width, height);
   const zones = computeZones(imageData);
 
   let lumetriResult = null;
@@ -302,24 +306,41 @@ function renderSteps(operations, lumetriValues) {
 }
 
 // ---------- Live view (automatic) ----------
+//
+// Polls the playhead position every second — cheap, no export involved.
+// Only when it's actually moved does it do a real capture, and that
+// capture is a small 320x180 export (a histogram doesn't need full
+// resolution). Re-exporting full-res on a blind timer regardless of
+// activity was real render load competing with Premiere's own
+// responsiveness — this only pays the cost when there's something new
+// to look at.
 
-async function liveTick() {
+let lastLivePosKey = null;
+
+async function pollPlayhead() {
   if (!liveEnabled || captureBusy) return;
-  captureBusy = true;
   try {
     const proj = await ppro.Project.getActiveProject();
     if (!proj) return;
     const seq = await proj.getActiveSequence();
     if (!seq) return;
 
-    const { zones, lumetriResult } = await captureFrameState(proj, seq);
-    renderZoneBar(zones);
-    renderLiveValues(lumetriResult);
+    const pos = await withTimeout(seq.getPlayerPosition(), 5000, "Reading playhead position");
+    const posKey = pos.ticks != null ? String(pos.ticks) : String(pos.seconds);
+    if (posKey === lastLivePosKey) return; // playhead hasn't moved — nothing new to capture
+    lastLivePosKey = posKey;
+
+    captureBusy = true;
+    try {
+      const { zones, lumetriResult } = await captureFrameState(proj, seq, 320, 180);
+      renderZoneBar(zones);
+      renderLiveValues(lumetriResult);
+    } finally {
+      captureBusy = false;
+    }
   } catch (err) {
-    // Silent — live view shouldn't spam the error box every 3s. If it's a
-    // persistent problem, "Check my grade" will surface it explicitly.
-  } finally {
-    captureBusy = false;
+    // Silent — live view shouldn't spam the error box on every poll. If
+    // it's a persistent problem, "Check my grade" will surface it.
   }
 }
 
@@ -327,8 +348,8 @@ document.getElementById("liveToggle").addEventListener("change", (e) => {
   liveEnabled = e.target.checked;
 });
 
-liveTimer = setInterval(liveTick, LIVE_INTERVAL_MS);
-liveTick();
+liveTimer = setInterval(pollPlayhead, 1000);
+pollPlayhead();
 
 // Waits for any in-flight capture (from the live loop) to finish, then
 // claims the mutex for an explicit, deliberate capture.
@@ -356,7 +377,7 @@ document.getElementById("btnPreview").addEventListener("click", async () => {
     let frameBase64;
     try {
       const { proj, seq } = await withTimeout(getActiveSequence(), 10000, "Reading sequence");
-      frameBase64 = await exportAndRead(seq, "gradingcoach_preview_src.png", readAsBase64);
+      frameBase64 = await exportAndRead(seq, "gradingcoach_preview_src.png", readAsBase64, 1280, 720);
     } finally {
       captureBusy = false;
     }
@@ -404,7 +425,7 @@ document.getElementById("btnCheckGrade").addEventListener("click", async () => {
     await claimCapture();
     let zones, lumetriResult;
     try {
-      ({ zones, lumetriResult } = await captureFrameState(proj, seq));
+      ({ zones, lumetriResult } = await captureFrameState(proj, seq, 1920, 1080));
     } finally {
       captureBusy = false;
     }
