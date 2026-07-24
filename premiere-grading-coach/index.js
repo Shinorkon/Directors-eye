@@ -149,27 +149,30 @@ document.getElementById("btnCheckGrade").addEventListener("click", async () => {
         throw new Error(`exportSequenceFrame() returned false (folder: ${folder.nativePath})`);
       }
 
-      // Entry visibility can lag the native write by a beat, and the
-      // exporter sometimes double-appends .png — retry both names briefly
-      // before giving up, so a one-frame race doesn't read as a hard failure.
-      let fileEntry = null;
-      let lastErr = null;
+      // Entry visibility (and the underlying write lock) can lag the native
+      // export by a beat, and the exporter sometimes double-appends .png —
+      // retry the *whole* find-then-read step, not just the lookup, since
+      // the directory entry can appear before Premiere releases its write
+      // handle on the file (that's what threw "resource busy or locked"
+      // here even though getEntry() had already succeeded).
       const candidates = [filename, filename + ".png"];
-      for (let attempt = 0; attempt < 3 && !fileEntry; attempt++) {
-        if (attempt > 0) await new Promise((r) => setTimeout(r, 200));
+      let imageData = null;
+      let lastErr = null;
+      for (let attempt = 0; attempt < 6 && !imageData; attempt++) {
+        if (attempt > 0) await new Promise((r) => setTimeout(r, 300 * attempt));
         for (const name of candidates) {
           try {
-            fileEntry = await folder.getEntry(name);
+            const fileEntry = await folder.getEntry(name);
+            imageData = await loadImageData(fileEntry);
             break;
           } catch (e) {
             lastErr = e;
           }
         }
       }
-      if (!fileEntry) {
-        throw new Error(`export reported success but no file found as "${candidates.join('" or "')}" in ${folder.nativePath}: ${lastErr}`);
+      if (!imageData) {
+        throw new Error(`export reported success but couldn't read "${candidates.join('" or "')}" in ${folder.nativePath} after retries: ${lastErr}`);
       }
-      const imageData = await loadImageData(fileEntry);
       zones = computeZones(imageData);
     } catch (err) {
       renderVerdict(`Couldn't export/analyze the current frame: ${err}`);

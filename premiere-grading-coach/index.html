@@ -3,77 +3,175 @@
   <head>
     <script src="index.js"></script>
     <style>
+      :root {
+        --bg: #1e1e1e;
+        --panel: #262626;
+        --border: #3a3a3a;
+        --text: #d8d8d8;
+        --text-dim: #8a8a8a;
+        --accent: #2680eb;
+        --accent-hover: #4b9eff;
+        --radius: 5px;
+      }
+      * {
+        box-sizing: border-box;
+      }
       body {
-        font-family: sans-serif;
-        padding: 10px;
+        font-family: "Adobe Clean", "Segoe UI", sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        padding: 12px;
         font-size: 12px;
+        line-height: 1.4;
       }
       h4 {
-        margin: 0 0 8px;
+        margin: 0 0 14px;
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+        color: var(--text-dim);
       }
       section {
-        margin-bottom: 14px;
-        padding-bottom: 10px;
-        border-bottom: 1px solid #444;
+        margin-bottom: 16px;
+        padding-bottom: 14px;
+        border-bottom: 1px solid var(--border);
+      }
+      section:last-of-type {
+        border-bottom: none;
       }
       label {
         display: block;
-        margin-bottom: 4px;
-        color: #aaa;
-      }
-      input[type="password"],
-      input[type="text"] {
-        width: 100%;
-        box-sizing: border-box;
         margin-bottom: 6px;
+        color: var(--text-dim);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+      }
+      button {
+        font-family: inherit;
+        font-size: 12px;
+        color: var(--text);
+        background: #3a3a3a;
+        border: 1px solid #4a4a4a;
+        border-radius: var(--radius);
+        padding: 7px 12px;
+        cursor: pointer;
+        transition: background 0.1s, border-color 0.1s;
+      }
+      button:hover:not(:disabled) {
+        background: #454545;
+        border-color: #5a5a5a;
+      }
+      button:active:not(:disabled) {
+        background: #333;
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      #btnCheckGrade {
+        width: 100%;
+        padding: 10px;
+        font-weight: 600;
+        font-size: 13px;
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+      }
+      #btnCheckGrade:hover:not(:disabled) {
+        background: var(--accent-hover);
+        border-color: var(--accent-hover);
+      }
+      #refRow {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      #refStatus {
+        color: var(--text-dim);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      #refThumb {
+        max-width: 100%;
+        max-height: 90px;
+        display: none;
+        margin-top: 8px;
+        border-radius: var(--radius);
+        border: 1px solid var(--border);
       }
       #verdict {
-        padding: 8px;
-        border-radius: 4px;
-        margin: 10px 0;
-        font-weight: bold;
+        padding: 10px 12px;
+        border-radius: var(--radius);
+        margin: 4px 0 16px;
+        font-weight: 600;
         display: none;
+        border: 1px solid transparent;
       }
       #verdict.achievable {
         background: #123a1f;
         color: #7ee2a0;
+        border-color: #1e5c34;
       }
       #verdict.partial {
         background: #3a3212;
         color: #e2c97e;
+        border-color: #5c4e1e;
       }
       #verdict.blocked {
         background: #3a1212;
         color: #e27e7e;
+        border-color: #5c1e1e;
       }
       #steps {
-        padding-left: 18px;
+        list-style: none;
+        padding: 0;
+        margin: 0 0 16px;
       }
       #steps li {
+        padding: 10px 12px;
         margin-bottom: 8px;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
       }
       .step-tool {
-        font-weight: bold;
+        font-weight: 600;
+        color: var(--text);
       }
       .step-reason {
-        color: #999;
+        color: var(--text-dim);
+        margin-top: 4px;
+      }
+      details {
+        margin-top: 4px;
+      }
+      summary {
+        color: var(--text-dim);
+        cursor: pointer;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        padding: 4px 0;
+      }
+      details button {
+        width: 100%;
+        text-align: left;
+        margin-top: 6px;
       }
       #log {
         white-space: pre-wrap;
         background: #111;
         color: #0f0;
         padding: 8px;
-        margin-top: 8px;
+        margin-top: 10px;
         max-height: 280px;
         overflow: auto;
         font-size: 11px;
-      }
-      #refThumb {
-        max-width: 100%;
-        max-height: 90px;
-        display: none;
-        margin-top: 6px;
-        border-radius: 4px;
+        border-radius: var(--radius);
+        border: 1px solid var(--border);
       }
     </style>
   </head>
@@ -82,29 +180,25 @@
 
     <section>
       <label>Reference look (optional)</label>
-      <button id="btnPickReference">Choose reference image</button>
-      <span id="refStatus" style="margin-left: 8px; color: #888;"></span>
+      <div id="refRow">
+        <button id="btnPickReference">Choose reference image</button>
+        <span id="refStatus"></span>
+      </div>
       <img id="refThumb" />
     </section>
 
     <section>
-      <button id="btnCheckGrade" style="width: 100%; padding: 8px; font-weight: bold;">
-        Check my grade
-      </button>
+      <button id="btnCheckGrade">Check my grade</button>
     </section>
 
     <div id="verdict"></div>
     <ol id="steps"></ol>
 
-    <details style="margin-top: 10px;">
+    <details>
       <summary>Diagnostics (Phase 0 spike tools)</summary>
-      <br />
       <button id="btnInfo">Get sequence info</button>
-      <br /><br />
       <button id="btnExport">Export current frame</button>
-      <br /><br />
       <button id="btnLumetri">List clip components + params</button>
-      <br /><br />
       <button id="btnAnalyze">Analyze exported frame</button>
       <pre id="log"></pre>
     </details>
