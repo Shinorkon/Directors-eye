@@ -21,7 +21,8 @@ jobs:
             # Sync dist/ to Caddy static root
             rm -rf /var/www/directors-eye/*
             cp -r dist/* /var/www/directors-eye/
-            # Kill old workers & restart backend
-            pkill -f "directors-eye/backend/venv/bin/python" 2>/dev/null || true
-            sleep 1
-            cd backend && nohup venv/bin/python main.py > /var/log/directors-eye.log 2>&1 &
+            # Restart backend via systemd (Restart=always, no manual pkill/nohup —
+            # a prior pkill-by-pattern here self-matched the systemd-managed
+            # uvicorn workers too, racing systemd's own restart and sometimes
+            # leaving the port unbound until manually reconciled).
+            systemctl restart directors-eye
